@@ -1,5 +1,5 @@
 {
-  "name": "@anatrace/action",
+  "name": "anatrace-action",
   "version": "0.0.0",
   "type": "module",
   "license": "MIT",

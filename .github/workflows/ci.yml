@@ -29,7 +29,7 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @anatrace/core build
+      - run: pnpm --filter anatrace-core build
       - run: cd packages/core && npm pack --dry-run
       - run: cd packages/core && npx publint
       # ESM-only by design (Node >=22). Ignore the two rules that only flag the
