@@ -37,8 +37,10 @@ get away with"** — across both harnesses, entirely on your machine.
 
 `anatrace-core` is pure by construction — its TypeScript config compiles with
 `"types": []`, so a `node:fs`/`process`/network reference is a **compile error**,
-not a lint opinion. Determinism is verified in CI against a committed golden
-fixture. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+not a lint opinion. CI locks the published `ProvenanceCounts` / `TokenCounts`
+*shape* (exact fields, key order, no `cost_usd`) against a committed golden;
+the full same-bytes-in → byte-identical-out determinism test ships with the
+parser in the next milestone. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
