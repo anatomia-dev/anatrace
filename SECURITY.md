@@ -13,7 +13,7 @@ anatrace is **deterministic and local by design**: it reads session transcripts
 on your machine and makes no network calls during analysis. Reports that are
 especially in scope:
 
-- Any code path in `@anatrace/core` that performs I/O, network, or non-deterministic
+- Any code path in `anatrace-core` that performs I/O, network, or non-deterministic
   behavior (this would violate the core purity contract).
 - Any way the CLI could exfiltrate transcript contents off the machine.
 

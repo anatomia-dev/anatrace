@@ -7,7 +7,7 @@
   "files": ["dist"],
   "publishConfig": { "access": "public", "provenance": true },
   "dependencies": {
-    "@anatrace/core": "workspace:*",
+    "anatrace-core": "workspace:*",
     "commander": "^14.0.3"
   },
   "scripts": {

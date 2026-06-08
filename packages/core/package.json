@@ -1,5 +1,5 @@
 {
-  "name": "@anatrace/core",
+  "name": "anatrace-core",
   "version": "0.0.0",
   "type": "module",
   "license": "MIT",

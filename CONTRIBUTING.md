@@ -35,7 +35,7 @@ pnpm check       # typecheck + build + test + lint, all packages
 
 These two invariants are the brand. CI enforces both:
 
-1. **`@anatrace/core` is pure.** Its `tsconfig.json` sets `"types": []`, so any
+1. **`anatrace-core` is pure.** Its `tsconfig.json` sets `"types": []`, so any
    `node:*` / `process` / `Buffer` / network reference fails to **typecheck**.
    Core also keeps `"dependencies": {}`. Keep I/O in `anatrace` (the CLI).
 2. **Deterministic output.** Same input bytes → byte-identical result. The

@@ -20,21 +20,22 @@ get away with"** — across both harnesses, entirely on your machine.
 
 | Piece | State |
 |-------|-------|
-| Package topology (`@anatrace/core` · `anatrace` · `@anatrace/action`) | ✅ laid |
+| Package topology (`anatrace` · `anatrace-core`; `anatrace-action` off-npm) | ✅ laid |
 | Public type contract (`ProvenanceCounts`, `TokenCounts`, + experimental stubs) | ✅ seeded |
 | Determinism + core-purity guards | ✅ wired |
 | Adapters / rules / CLI features | ⛔ not yet (next milestone) |
 
 ## Packages
 
-- **`@anatrace/core`** — the pure engine and the shared type contract. No fs, no
-  network, no clock, no randomness. The package Anatomia will one day depend on.
 - **`anatrace`** — the CLI (the only I/O layer). Currently `--version` / `--help`.
-- **`@anatrace/action`** — a GitHub Action shell (placeholder).
+- **`anatrace-core`** — the pure engine and the shared type contract. No fs, no
+  network, no clock, no randomness. The package Anatomia will one day depend on.
+- **`anatrace-action`** — a GitHub Action shell (placeholder). Consumed straight
+  from this repo (`uses: anatomia-dev/anatrace`); **not published to npm**.
 
 ## Determinism & privacy contract
 
-`@anatrace/core` is pure by construction — its TypeScript config compiles with
+`anatrace-core` is pure by construction — its TypeScript config compiles with
 `"types": []`, so a `node:fs`/`process`/network reference is a **compile error**,
 not a lint opinion. Determinism is verified in CI against a committed golden
 fixture. See [CONTRIBUTING.md](./CONTRIBUTING.md).

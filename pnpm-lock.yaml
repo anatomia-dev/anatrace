@@ -47,7 +47,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@anatrace/core':
+      anatrace-core:
         specifier: workspace:*
         version: link:../core
       commander:
