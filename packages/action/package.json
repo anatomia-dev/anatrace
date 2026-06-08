@@ -1,0 +1,14 @@
+{
+  "name": "@anatrace/action",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "dependencies": { "anatrace": "workspace:*" },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "lint": "eslint src"
+  }
+}

@@ -1,0 +1,53 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request: { branches: [main] }
+jobs:
+  build-test:
+    name: build-test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: { node: [22, 24] }
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: '${{ matrix.node }}', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r run build
+      - run: pnpm -r run typecheck
+      - run: pnpm -r run test
+      - run: pnpm -r run lint
+  package-correctness:
+    name: package-correctness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @anatrace/core build
+      - run: cd packages/core && npm pack --dry-run
+      - run: cd packages/core && npx publint
+      # ESM-only by design (Node >=22). Ignore the two rules that only flag the
+      # intentional absence of CJS/legacy resolution: node10 (no-resolution) and
+      # CJS-require-resolves-to-ESM (Node >=22 handles require(ESM) natively).
+      - run: cd packages/core && npx @arethetypeswrong/cli --pack --ignore-rules cjs-resolves-to-esm no-resolution
+  bunx-smoke:
+    name: bunx-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22, cache: pnpm }
+      - uses: oven-sh/setup-bun@v2
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter anatrace build
+      # Runtime smoke: prove the built CLI runs under bun (bun executes the file
+      # directly). The published `bunx anatrace` form lands once the package is on
+      # npm (Runbook 2). `bunx .` does NOT work — bun parses `.` as a dep spec.
+      - run: cd packages/cli && bun dist/index.mjs --version

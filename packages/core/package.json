@@ -1,0 +1,23 @@
+{
+  "name": "@anatrace/core",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": { "access": "public", "provenance": true },
+  "dependencies": {},
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "anatrace-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.0.0", "pnpm": ">=9.0.0" },
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "preinstall": "npx only-allow pnpm",
+    "build": "pnpm -r --stream run build",
+    "test": "pnpm -r --stream run test",
+    "lint": "pnpm -r --stream run lint",
+    "typecheck": "pnpm -r --stream run typecheck",
+    "check": "pnpm typecheck && pnpm build && pnpm test && pnpm lint",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@typescript-eslint/eslint-plugin": "^8.61.0",
+    "@typescript-eslint/parser": "^8.61.0",
+    "eslint": "^10.3.0",
+    "eslint-plugin-jsdoc": "^63.0.0",
+    "husky": "^9.1.7",
+    "tsdown": "^0.22.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.5",
+    "@changesets/cli": "^2.31.0"
+  }
+}
