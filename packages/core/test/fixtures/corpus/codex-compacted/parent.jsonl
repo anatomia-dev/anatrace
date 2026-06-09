@@ -1,0 +1,7 @@
+{"timestamp":"2026-06-08T00:00:00.000Z","type":"session_meta","payload":{"id":"sess-codex-compacted","originator":"codex_cli","cli_version":"0.9.1","cwd":"/work/proj","source":"compact"}}
+{"timestamp":"2026-06-08T00:00:01.000Z","type":"turn_context","payload":{"model":"gpt-5.5","cwd":"/work/proj"}}
+{"timestamp":"2026-06-08T00:00:02.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Continuing after a context compaction."}]}}
+{"timestamp":"2026-06-08T00:00:03.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":8000,"cached_input_tokens":6000,"output_tokens":400,"reasoning_output_tokens":30,"total_tokens":8400}}}}
+{"timestamp":"2026-06-08T00:00:04.000Z","type":"event_msg","payload":{"type":"compacted","message":"history compacted"}}
+{"timestamp":"2026-06-08T00:00:05.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"c9","arguments":"{\"command\":\"pnpm test\"}"}}
+{"timestamp":"2026-06-08T00:00:06.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":12000,"cached_input_tokens":9000,"output_tokens":650,"reasoning_output_tokens":40,"total_tokens":12650}}}}

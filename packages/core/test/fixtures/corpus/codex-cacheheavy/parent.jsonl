@@ -1,0 +1,6 @@
+{"timestamp":"2026-06-08T00:00:00.000Z","type":"session_meta","payload":{"id":"sess-codex-cacheheavy","originator":"codex_cli","cli_version":"0.9.1","cwd":"/work/proj","source":"startup"}}
+{"timestamp":"2026-06-08T00:00:01.000Z","type":"turn_context","payload":{"model":"gpt-5.5","cwd":"/work/proj"}}
+{"timestamp":"2026-06-08T00:00:02.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Applying a patch across two files."}]}}
+{"timestamp":"2026-06-08T00:00:03.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"c1","arguments":"{\"command\":\"ls\"}"}}
+{"timestamp":"2026-06-08T00:00:04.000Z","type":"event_msg","payload":{"type":"patch_apply_end","call_id":"c2","success":true,"status":"completed","changes":{"/work/proj/src/a.ts":{"type":"update"},"/work/proj/src/new.ts":{"type":"add"}}}}
+{"timestamp":"2026-06-08T00:00:05.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":20000,"cached_input_tokens":16000,"output_tokens":500,"reasoning_output_tokens":120,"total_tokens":20500}}}}

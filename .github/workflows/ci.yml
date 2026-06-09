@@ -46,7 +46,10 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - uses: oven-sh/setup-bun@v2
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter anatrace build
+      # The cli imports anatrace-core at module top (Runbook 2), so core must build
+      # first — `pnpm --filter anatrace build` alone leaves core/dist absent and bun
+      # errors "Cannot find package 'anatrace-core'". Build all packages (matches build-test).
+      - run: pnpm -r run build
       # Runtime smoke: prove the built CLI runs under bun (bun executes the file
       # directly). The published `bunx anatrace` form lands once the package is on
       # npm (Runbook 2). `bunx .` does NOT work — bun parses `.` as a dep spec.
