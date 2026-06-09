@@ -1,3 +1,5 @@
+import type { NormalizedSession } from './session.js';
+
 /**
  * Active severity = the configurable gate level (ESLint-style). The level lives in
  * {@link Config}, never baked into a {@link Rule}. Maps to SARIF note/warning/error
@@ -8,42 +10,55 @@
  */
 export type Severity = 'off' | 'info' | 'warn' | 'error';
 
-/** @experimental One normalized agent session — the shared object every adapter yields. */
-export interface NormalizedSession {
-  /** In-band compat signal; the real stability contract (Runbook 2 evolves the body). */
-  schemaVersion: number;
-}
-
-/** @experimental Harness adapter. Raw bytes in (keeps core pure), one session out. */
-export interface Adapter {
-  harness: string;
-  detect(bytes: Uint8Array): boolean;
-  parse(bytes: Uint8Array): NormalizedSession;
-}
-
-/** @experimental A finding emitted by a rule. */
+/**
+ * A finding emitted by a rule. `location.file` is populated where a friction finding
+ * maps to an edit target; `location.line` is UNPOPULATED in R2 (only the deferred AST
+ * rule emits line numbers — REQ Item 6). `fingerprint?` is DEFERRED (Action-pass only).
+ */
 export interface Finding {
   ruleId: string;
   severity: Severity;
   message: string;
+  /** Shape locked; `line` unpopulated in R2. */
+  location?: { file: string; line?: number };
 }
 
-/** @experimental One rule. `defaultSeverity` is a default; active severity is config-driven. */
+/** @experimental Declared, ZERO implementations in R2 (REQ Item 5 — lock the seam). */
+export interface Mandate {
+  schemaVersion: number;
+  framework: string;
+  claims: unknown[];
+}
+/** @experimental Opaque marker; do NOT pre-spec a bytes payload (REQ Item 5). */
+export interface RepoSnapshot {
+  schemaVersion: number;
+}
+/** @experimental Symmetric to {@link import('./adapter.js').Adapter}; no impl in R2. */
+export interface MandateAdapter {
+  framework: string;
+  detect(bytes: Uint8Array): boolean;
+}
+
+/** The evidence a rule evaluates over. `mandate`/`repo` are optional → tier-1 rules ignore them. */
+export interface EvalContext {
+  session: NormalizedSession;
+  mandate?: Mandate;
+  repo?: RepoSnapshot;
+}
+
+/** Config-resolved per-rule settings (the deferred thrash rule's `N` etc. live here). */
+export type RuleOptions = Record<string, unknown>;
+
+/** One rule. `defaultSeverity` is a default; active severity is config-driven. */
 export interface Rule {
   id: string;
   pack: string;
   meta: { docs?: string; rationale?: string };
   defaultSeverity: Severity;
-  evaluate(session: NormalizedSession, opts?: Record<string, unknown>): Finding[];
+  evaluate(ctx: EvalContext, opts?: RuleOptions): Finding[];
 }
 
-/** @experimental Run output envelope. */
-export interface Report {
-  schemaVersion: number;
-  findings: Finding[];
-}
-
-/** @experimental ESLint-shaped config (extends/severity overrides land in Runbook 2). */
+/** @experimental ESLint-shaped config (extends/severity overrides land later). */
 export interface Config {
   schemaVersion: number;
 }

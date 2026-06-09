@@ -1,0 +1,18 @@
+{
+  "tokens": {
+    "input": 4900,
+    "output": 870,
+    "cache_create": 900,
+    "cache_read": 10800
+  },
+  "price_table_version": "2026-06-08",
+  "derive_version": "1",
+  "duration_ms": 8000,
+  "turns": 4,
+  "tool_calls": 2,
+  "commands_run": 0,
+  "tests_executed": 0,
+  "failures_encountered": 0,
+  "files_touched": 0,
+  "model": "claude-opus-4-8"
+}
