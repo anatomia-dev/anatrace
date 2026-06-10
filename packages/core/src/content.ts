@@ -33,11 +33,17 @@ export function transcriptContentResolver(session: NormalizedSession): ContentRe
         let next = base;
         let ok = true;
         for (const h of e.hunks) {
-          if (next.includes(h.before)) next = next.replace(h.before, h.after);
-          else {
+          if (!next.includes(h.before)) {
             ok = false; // a hunk that doesn't apply ⇒ our reconstruction is unfaithful
             break;
           }
+          // FUNCTION replacement → literal semantics: `$&`/`$$`/`$\``/`$'`/`$1…` in the
+          // edit's new text are inserted verbatim (a string replacement would interpret
+          // them and corrupt regex-bearing code). `replaceAll` honors a `replace_all:true`
+          // edit (a plain `.replace` only swaps the FIRST match → unfaithful bytes).
+          next = h.replaceAll
+            ? next.replaceAll(h.before, () => h.after)
+            : next.replace(h.before, () => h.after);
         }
         content.set(path, ok ? next : null);
       } else {
