@@ -28,7 +28,7 @@ export interface EditEvent {
   op: 'create' | 'modify' | 'delete' | 'rename';
   paths: string[];
   /** @experimental unpopulated R2 */ fullContent?: string;
-  /** @experimental unpopulated R2 */ hunks?: { before: string; after: string }[];
+  /** @experimental unpopulated R2 */ hunks?: { before: string; after: string; replaceAll?: boolean }[];
   /** @experimental unpopulated R2 */ appliedContent?: string;
 }
 

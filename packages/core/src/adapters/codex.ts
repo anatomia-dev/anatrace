@@ -155,7 +155,13 @@ function parseCodex(group: NamedBlob[]): NormalizedSession | null {
       if (ptype === 'function_call_output' || ptype === 'custom_tool_call_output') {
         const output = rObj(payload, 'output');
         const text = output ? rStr(output, 'content') : rStr(payload, 'output');
-        events.push({ type: 'toolResult', text, ...meta });
+        // Codex carries no structured is_error; the exit signal lives in the output text
+        // as `Process exited with code N`. Map isError ONLY on a present non-zero code —
+        // no marker ⇒ no signal ⇒ honestly not an error (don't guess). Mirrors the
+        // ToolResultEvent.isError shape the Claude adapter sets from tool_result.is_error.
+        const m = text.match(/Process exited with code (\d+)/);
+        const isError = m ? Number(m[1]) !== 0 : false;
+        events.push({ type: 'toolResult', text, ...(isError ? { isError } : {}), ...meta });
         return;
       }
     }

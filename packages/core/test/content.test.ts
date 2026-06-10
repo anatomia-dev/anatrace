@@ -60,6 +60,44 @@ describe('B4 — transcript-content resolver (pure, no disk; honest null)', () =
     expect(transcriptContentResolver(s)('/nope')).toBeNull();
   });
 
+  it('LITERAL replacement: an Edit whose new_string contains $&/$1 reconstructs byte-exactly (no $-pattern corruption)', () => {
+    const before = 'PLACEHOLDER';
+    const after = 'const re = s.replace(/(\\w+)/, "$1=$&"); // $$ $` literal';
+    const lines = jsonl([
+      assistantWithTools([tool('Write', { file_path: '/r/a.ts', content: `x ${before} y` })], '2026-06-08T00:00:01.000Z'),
+      assistantWithTools([tool('Edit', { file_path: '/r/a.ts', old_string: before, new_string: after })], '2026-06-08T00:00:02.000Z'),
+    ]);
+    const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(lines) }])!;
+    expect(dec(transcriptContentResolver(s)('/r/a.ts'))).toBe(`x ${after} y`);
+  });
+
+  it('replace_all:true folds ALL occurrences of old_string', () => {
+    const lines = jsonl([
+      assistantWithTools([tool('Write', { file_path: '/r/a.ts', content: 'foo foo foo' })], '2026-06-08T00:00:01.000Z'),
+      assistantWithTools([tool('Edit', { file_path: '/r/a.ts', old_string: 'foo', new_string: 'bar', replace_all: true })], '2026-06-08T00:00:02.000Z'),
+    ]);
+    const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(lines) }])!;
+    expect(dec(transcriptContentResolver(s)('/r/a.ts'))).toBe('bar bar bar');
+  });
+
+  it('without replace_all only the FIRST occurrence folds (default Edit semantics)', () => {
+    const lines = jsonl([
+      assistantWithTools([tool('Write', { file_path: '/r/a.ts', content: 'foo foo foo' })], '2026-06-08T00:00:01.000Z'),
+      assistantWithTools([tool('Edit', { file_path: '/r/a.ts', old_string: 'foo', new_string: 'bar' })], '2026-06-08T00:00:02.000Z'),
+    ]);
+    const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(lines) }])!;
+    expect(dec(transcriptContentResolver(s)('/r/a.ts'))).toBe('bar foo foo');
+  });
+
+  it('a non-applicable hunk still yields honest null (guard preserved under the function-replace)', () => {
+    const lines = jsonl([
+      assistantWithTools([tool('Write', { file_path: '/r/a.ts', content: 'alpha' })], '2026-06-08T00:00:01.000Z'),
+      assistantWithTools([tool('Edit', { file_path: '/r/a.ts', old_string: 'NOPE', new_string: '$&x', replace_all: true })], '2026-06-08T00:00:02.000Z'),
+    ]);
+    const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(lines) }])!;
+    expect(transcriptContentResolver(s)('/r/a.ts')).toBeNull();
+  });
+
   it('Codex `add` carries full content; `update` (unified_diff) → honest null', () => {
     const lines = jsonl([
       { type: 'session_meta', timestamp: '2026-06-08T00:00:00.000Z', payload: { id: 'sc', originator: 'codex_cli', cli_version: '0.9' } },

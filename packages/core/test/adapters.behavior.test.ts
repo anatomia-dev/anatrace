@@ -91,6 +91,32 @@ describe('A4 — Codex adapter: exec_command vs write_stdin + move_path rename +
   });
 });
 
+describe('Codex toolResult isError — parsed from "Process exited with code N"', () => {
+  const base = [
+    { type: 'session_meta', timestamp: '2026-06-08T00:00:00.000Z', payload: { id: 'sess-codex-err', originator: 'codex_cli', cli_version: '0.9.1' } },
+    { type: 'turn_context', timestamp: '2026-06-08T00:00:01.000Z', payload: { model: 'gpt-5.5' } },
+  ];
+  function resultOf(outputText: string) {
+    const lines = jsonl([
+      ...base,
+      { type: 'response_item', timestamp: '2026-06-08T00:00:02.000Z', payload: { type: 'function_call', name: 'exec_command', call_id: 'c1' } },
+      { type: 'response_item', timestamp: '2026-06-08T00:00:03.000Z', payload: { type: 'function_call_output', call_id: 'c1', output: { content: outputText } } },
+    ]);
+    const s = codexAdapter.parse([{ name: 'parent', bytes: enc(lines) }])!;
+    return s.events.find((e) => e.type === 'toolResult') as { isError?: boolean } | undefined;
+  }
+
+  it('code 1 → isError === true', () => {
+    expect(resultOf('boom\nProcess exited with code 1').isError).toBe(true);
+  });
+  it('code 0 → falsy (success marker is not an error)', () => {
+    expect(resultOf('ok\nProcess exited with code 0').isError).toBeFalsy();
+  });
+  it('no marker → falsy (no signal ⇒ honestly not an error)', () => {
+    expect(resultOf('some output with no exit marker').isError).toBeFalsy();
+  });
+});
+
 describe('A0 — detect-window robustness (metadata-front-loaded sessions)', () => {
   // Real shape (corpus): sessions front-load agent-setting / last-prompt / permission-mode /
   // mode / queue-operation metadata lines before the first real message. A real session

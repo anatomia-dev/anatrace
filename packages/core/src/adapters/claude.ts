@@ -152,19 +152,19 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
             // B4 — populate the EditEvent content carrier from the transcript: Write → full
             // content; Edit/MultiEdit → string-replace hunks (the transcript-content resolver
             // folds these). NotebookEdit carries no foldable content → resolver nulls it.
-            const carrier: { fullContent?: string; hunks?: { before: string; after: string }[] } = {};
+            const carrier: { fullContent?: string; hunks?: { before: string; after: string; replaceAll?: boolean }[] } = {};
             if (name === 'Write') {
               carrier.fullContent = rStr(input, 'content');
             } else if (name === 'Edit') {
               const before = rStr(input, 'old_string');
-              if (before) carrier.hunks = [{ before, after: rStr(input, 'new_string') }];
+              if (before) carrier.hunks = [{ before, after: rStr(input, 'new_string'), replaceAll: input?.['replace_all'] === true }];
             } else if (name === 'MultiEdit') {
-              const hunks: { before: string; after: string }[] = [];
+              const hunks: { before: string; after: string; replaceAll?: boolean }[] = [];
               for (const ed of rArr(input, 'edits')) {
                 if (typeof ed !== 'object' || ed === null) continue;
                 const eo = ed as Record<string, unknown>;
                 const before = rStr(eo, 'old_string');
-                if (before) hunks.push({ before, after: rStr(eo, 'new_string') });
+                if (before) hunks.push({ before, after: rStr(eo, 'new_string'), replaceAll: eo['replace_all'] === true });
               }
               if (hunks.length) carrier.hunks = hunks;
             }
