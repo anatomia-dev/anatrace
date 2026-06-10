@@ -37,6 +37,7 @@ export interface PriceEntry {
  * table injected into {@link computeCost} when the CLI renders cost.
  */
 export const PRICES: PriceEntry[] = [
+  { model: 'claude-fable-5', input: 10, output: 50, cache_create: 12.5, cache_read: 1 },
   { model: 'claude-opus-4-8', input: 5, output: 25, cache_create: 6.25, cache_read: 0.5 },
   { model: 'claude-opus-4-7', input: 5, output: 25, cache_create: 6.25, cache_read: 0.5 },
   { model: 'claude-opus-4-6', input: 5, output: 25, cache_create: 6.25, cache_read: 0.5 },
