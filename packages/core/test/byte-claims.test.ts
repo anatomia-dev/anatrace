@@ -48,11 +48,25 @@ describe('A14 — byte-claims on the synthetic corpus', () => {
     ]);
   });
 
-  it('#4 Claude interrupt is NOT shipped: no interrupt event, no interrupt finding, no rule', () => {
-    const s = parse('claude-plain')!;
-    expect(s.events.some((e) => e.type === 'interrupt')).toBe(false);
-    const report = analyze(s);
-    expect(report.findings.some((f) => f.ruleId.includes('interrupt'))).toBe(false);
+  it('#4 Claude interrupt IS shipped (B1.c): the marker → structured InterruptEvent, symmetric with Codex', () => {
+    // R2 deferred the Claude interrupt (text-only); B1.c emits it as a structured event.
+    const enc = (str: string): Uint8Array => new TextEncoder().encode(str);
+    const line = JSON.stringify({
+      type: 'user',
+      sessionId: 'sess-int',
+      uuid: 'u1',
+      timestamp: '2026-06-08T00:00:01.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] },
+    });
+    const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(line) }])!;
+    const interrupts = s.events.filter((e) => e.type === 'interrupt');
+    expect(interrupts.length).toBe(1);
+    expect((interrupts[0] as { reason: string }).reason).toBe('interrupted');
+    // The marker is NOT emitted as a human message.
+    expect(s.events.some((e) => e.type === 'message' && e.role === 'user')).toBe(false);
+    // claude-plain (no marker) still emits zero interrupts — no false positives.
+    expect(parse('claude-plain')!.events.some((e) => e.type === 'interrupt')).toBe(false);
+    // Still no separate `claude-interrupt` rule — the interrupt is one harness-neutral event.
     expect(allRules().some((r) => r.id === 'claude-interrupt')).toBe(false);
   });
 
@@ -84,5 +98,14 @@ describe('A14 — byte-claims on the synthetic corpus', () => {
     expect(s.subagents[0]!.dispatchToolUseId).toBe('toolu_disp');
     // subagent tokens are INCLUDED (parent-only would be 1400 input; with subagents 4900).
     expect(s.counts.tokens.input).toBe(4900);
+  });
+
+  it('B3 — the dispatch receipt (SubagentMeta.description) + the mandate key (agentType) are surfaced', () => {
+    // B3 cap: MEASURE coverage, surface the receipt — no coverage-raising effort. agentType
+    // (the agent-def binding key, REQ correction) is the load-bearing field; description is a
+    // receipt + weak intent hint; dispatchToolUseId is partial (~1-in-5 on the real corpus).
+    const s = parse('claude-fanout')!;
+    expect(s.subagents[0]!.description).toBe('Explore the data layer');
+    expect(s.subagents[0]!.agentType).toBe('explorer');
   });
 });

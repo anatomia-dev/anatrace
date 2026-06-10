@@ -49,9 +49,13 @@ export interface ToolResultEvent {
   text?: string;
   isError?: boolean;
 }
+/** Skill-signal provenance (B2). 'tool' = a structured Skill invocation (Claude, high-confidence); 'announce-text' = a portable announce-string match (Codex has no Skill primitive — low-confidence, OQ5). */
+export type SkillSource = 'tool' | 'announce-text';
 export interface SkillEvent {
   type: 'skill';
   skill: string;
+  /** B2: how the skill signal was derived; absent ⇒ treat as 'tool' (the R2 default). */
+  source?: SkillSource;
 }
 /** Structured interrupt vocabulary (Codex turn_aborted.reason==='interrupted'). */
 export interface InterruptEvent {
