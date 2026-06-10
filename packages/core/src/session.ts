@@ -30,6 +30,13 @@ export interface EditEvent {
   /** @experimental unpopulated R2 */ fullContent?: string;
   /** @experimental unpopulated R2 */ hunks?: { before: string; after: string; replaceAll?: boolean }[];
   /** @experimental unpopulated R2 */ appliedContent?: string;
+  /**
+   * @internal FI-13 join key — the Edit/Write `tool_use` BLOCK id (NOT `message.id`). Lets the
+   * transcript-content resolver skip an edit whose adjacent `tool_result` was `is_error:true`
+   * (a VOIDED edit — the FS never received those bytes). Optional/additive; not rendered, not
+   * counted. Mirrors the C6b SkillEvent.toolUseId id-threading; reused by the future D-DERIVE pass.
+   */
+  toolUseId?: string;
 }
 
 export interface MessageEvent {
@@ -48,6 +55,12 @@ export interface ToolResultEvent {
   type: 'toolResult';
   text?: string;
   isError?: boolean;
+  /**
+   * @internal FI-13 join key — the result's `tool_use_id` (Claude `tool_result.tool_use_id`),
+   * linking this result back to the Edit/Write that produced it so the resolver can void the
+   * matching edit when `isError === true`. Optional/additive; not rendered, not counted.
+   */
+  toolUseId?: string;
 }
 /** Skill-signal provenance (B2). 'tool' = a structured Skill invocation (Claude, high-confidence); 'announce-text' = a portable announce-string match (Codex has no Skill primitive — low-confidence, OQ5). */
 export type SkillSource = 'tool' | 'announce-text';

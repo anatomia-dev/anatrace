@@ -194,11 +194,15 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
               }
               if (hunks.length) carrier.hunks = hunks;
             }
+            // FI-13: carry the tool_use BLOCK id (NOT message.id) so the resolver can void this
+            // edit if its adjacent tool_result is is_error:true. Mirrors the C6b Skill id-threading.
+            const editToolUseId = rStr(block, 'id');
             events.push({
               type: 'edit',
               op: name === 'Write' ? 'create' : 'modify',
               paths: fp ? [fp] : [],
               ...carrier,
+              ...(editToolUseId ? { toolUseId: editToolUseId } : {}),
               ...meta,
             });
           } else {
@@ -222,10 +226,14 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
           if (typeof b !== 'object' || b === null) continue;
           const block = b as Record<string, unknown>;
           if (rStr(block, 'type') !== 'tool_result') continue;
+          // FI-13: capture the result's tool_use_id so the resolver can join an is_error result
+          // back to the Edit/Write it voided (the FS never received that edit's bytes).
+          const resultToolUseId = rStr(block, 'tool_use_id');
           events.push({
             type: 'toolResult',
             text: toolResultText(block['content']),
             isError: block['is_error'] === true,
+            ...(resultToolUseId ? { toolUseId: resultToolUseId } : {}),
             ...meta,
           });
         }
