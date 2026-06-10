@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "framework": "anatomia",
+  "claims": [
+    {
+      "id": "ana-verify:skill:testing-standards",
+      "says": "ana-verify loads the testing-standards skill",
+      "kind": "skill-invoked",
+      "scope": {
+        "kind": "whole-session"
+      },
+      "source": {
+        "kind": "in-blob",
+        "blob": "agents/ana-verify.md",
+        "fidelity": "verbatim"
+      },
+      "predicate": {
+        "target": "skill-events",
+        "scope": "transcript",
+        "matcher": "contains",
+        "value": "testing-standards"
+      }
+    },
+    {
+      "id": "ana-verify:skill:coding-standards",
+      "says": "ana-verify loads the coding-standards skill",
+      "kind": "skill-invoked",
+      "scope": {
+        "kind": "whole-session"
+      },
+      "source": {
+        "kind": "in-blob",
+        "blob": "agents/ana-verify.md",
+        "fidelity": "verbatim"
+      },
+      "predicate": {
+        "target": "skill-events",
+        "scope": "transcript",
+        "matcher": "contains",
+        "value": "coding-standards"
+      }
+    },
+    {
+      "id": "ana-verify:verify-independence",
+      "says": "ana-verify never reads the build report",
+      "kind": "human-constraint",
+      "scope": {
+        "kind": "whole-session"
+      },
+      "source": {
+        "kind": "in-blob",
+        "blob": "agents/ana-verify.md",
+        "fidelity": "verbatim"
+      },
+      "predicate": {
+        "target": "read-paths",
+        "scope": "transcript",
+        "matcher": "not_contains",
+        "value": "build_report"
+      }
+    },
+    {
+      "id": "contract:file-scope:packages/cli/src/types/proof.ts",
+      "says": "edits stay within packages/cli/src/types/proof.ts",
+      "kind": "file-scope",
+      "scope": {
+        "kind": "whole-session"
+      },
+      "source": {
+        "kind": "cross-artifact",
+        "workItemSlug": "",
+        "path": "contract.yaml",
+        "fidelity": "verbatim"
+      },
+      "predicate": {
+        "target": "edit-paths",
+        "scope": "transcript",
+        "matcher": "contains",
+        "value": "packages/cli/src/types/proof.ts"
+      }
+    },
+    {
+      "id": "contract:file-scope:packages/cli/src/utils/proofSummary.ts",
+      "says": "edits stay within packages/cli/src/utils/proofSummary.ts",
+      "kind": "file-scope",
+      "scope": {
+        "kind": "whole-session"
+      },
+      "source": {
+        "kind": "cross-artifact",
+        "workItemSlug": "",
+        "path": "contract.yaml",
+        "fidelity": "verbatim"
+      },
+      "predicate": {
+        "target": "edit-paths",
+        "scope": "transcript",
+        "matcher": "contains",
+        "value": "packages/cli/src/utils/proofSummary.ts"
+      }
+    },
+    {
+      "id": "contract:A001",
+      "says": "proofSummary surfaces the callout file path",
+      "kind": "contract-matcher",
+      "scope": {
+        "kind": "whole-session"
+      },
+      "source": {
+        "kind": "cross-artifact",
+        "workItemSlug": "",
+        "path": "contract.yaml",
+        "fidelity": "verbatim"
+      },
+      "predicate": {
+        "target": "file-content",
+        "scope": "runtime",
+        "matcher": "exists"
+      }
+    },
+    {
+      "id": "contract:A002",
+      "says": "the schema validates the new field",
+      "kind": "contract-matcher",
+      "scope": {
+        "kind": "whole-session"
+      },
+      "source": {
+        "kind": "cross-artifact",
+        "workItemSlug": "",
+        "path": "contract.yaml",
+        "fidelity": "verbatim"
+      },
+      "predicate": {
+        "target": "file-content",
+        "scope": "runtime",
+        "matcher": "exists"
+      }
+    }
+  ]
+}

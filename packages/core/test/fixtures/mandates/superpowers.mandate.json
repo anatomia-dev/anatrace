@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "framework": "superpowers",
+  "claims": [
+    {
+      "id": "executing-plans:announced",
+      "says": "announces \"I'm using the executing-plans skill to implement this plan.\" at start",
+      "kind": "skill-announced",
+      "scope": {
+        "kind": "event-triggered-window",
+        "opensOn": "skill-announced",
+        "closesOn": "next-skill-announce",
+        "agentScope": {
+          "kind": "root"
+        }
+      },
+      "source": {
+        "kind": "in-blob",
+        "blob": "skills/executing-plans/SKILL.md",
+        "fidelity": "verbatim"
+      },
+      "predicate": {
+        "target": "message-text",
+        "role": "assistant",
+        "literalsOnly": true,
+        "scope": "transcript",
+        "matcher": "contains",
+        "value": "I'm using the executing-plans skill to implement this plan."
+      }
+    },
+    {
+      "id": "subagent-driven-development:dispatch",
+      "says": "subagent-driven-development dispatches subagents",
+      "kind": "dispatch",
+      "scope": {
+        "kind": "event-triggered-window",
+        "opensOn": "skill-announced",
+        "closesOn": "next-skill-announce",
+        "agentScope": {
+          "kind": "root"
+        }
+      },
+      "source": {
+        "kind": "in-blob",
+        "blob": "skills/subagent-driven-development/SKILL.md",
+        "fidelity": "derived"
+      },
+      "confidence": "low",
+      "predicate": {
+        "target": "subagent",
+        "scope": "transcript",
+        "matcher": "exists"
+      }
+    }
+  ]
+}

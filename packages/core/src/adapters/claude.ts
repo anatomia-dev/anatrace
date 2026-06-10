@@ -3,10 +3,27 @@ import { readJsonlLines, parseJsonObject } from '../adapter.js';
 import type { NormalizedSession, SessionEvent, AgentRef, SubagentMeta } from '../session.js';
 import type { TokenCounts } from '../provenance.js';
 import { assembleSession, rStr, rNum, rObj, rArr, parseTs } from './shared.js';
-import { classifyClaudeUser } from './human.js';
+import { classifyClaudeUser, claudeUserText } from './human.js';
+import type { SkillOrigin } from '../session.js';
 
 const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 const FANOUT_TOOLS = new Set(['Agent', 'Task']); // Agent is current; Task is back/forward-compat alias
+
+/** C6b: the isMeta line that carries a skill's base directory. */
+const BASE_DIR_RE = /^\s*Base directory for this skill:\s*(\S.*?)\s*$/m;
+
+/**
+ * C6b: derive a {@link SkillOrigin} from a base-dir PATH (never the skill name). Stock skills
+ * live under a superpowers/plugin cache; plugin skills under a plugins dir; project skills
+ * under the repo's `.claude/skills`; everything else is personal (`~/.claude/skills`).
+ */
+function originFromBaseDir(baseDir: string): SkillOrigin {
+  if (/\/plugins?\//.test(baseDir)) return 'plugin';
+  if (/(^|\/)\.claude\/skills\//.test(baseDir) && !baseDir.includes('/.claude/skills/superpowers/'))
+    return 'project';
+  if (/\/superpowers\//.test(baseDir)) return 'stock';
+  return 'personal';
+}
 
 /** Parse "subagents/agent-<id>.jsonl" / ".meta.json" → the agentId suffix. `''` if not a subagent blob. */
 function subagentIdFromName(name: string): string {
@@ -72,6 +89,7 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
   const observed: string[] = [];
   const seenVersions = new Set<string>();
   const lastTotalById = new Map<string, number>(); // monotonicity canary state
+  const baseDirByToolUseId = new Map<string, string>(); // C6b: sourceToolUseID → base-dir
   let sessionId = '';
 
   for (const blob of group) {
@@ -146,7 +164,15 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
           const input = rObj(block, 'input');
           if (name === 'Skill') {
             const skill = rStr(input, 'command') || rStr(input, 'skill') || rStr(input, 'name');
-            events.push({ type: 'skill', skill, source: 'tool', ...meta }); // B2: structured invocation, high-confidence
+            // C6b: carry the tool_use BLOCK id (NOT message.id) as the base-dir join key.
+            const toolUseId = rStr(block, 'id');
+            events.push({
+              type: 'skill',
+              skill,
+              source: 'tool',
+              ...(toolUseId ? { toolUseId } : {}),
+              ...meta,
+            }); // B2: structured invocation, high-confidence
           } else if (EDIT_TOOLS.has(name)) {
             const fp = rStr(input, 'file_path');
             // B4 — populate the EditEvent content carrier from the transcript: Write → full
@@ -183,6 +209,15 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
       }
 
       if (type === 'user' && message) {
+        // C6b — the skill base-dir isMeta line: collect {sourceToolUseID → baseDir} for the
+        // post-pass join; do NOT emit it as prose (it must never become a human MessageEvent).
+        if (line['isMeta'] === true) {
+          const srcId = rStr(line, 'sourceToolUseID');
+          if (srcId) {
+            const m = BASE_DIR_RE.exec(claudeUserText(message['content']));
+            if (m && m[1]) baseDirByToolUseId.set(srcId, m[1]);
+          }
+        }
         for (const b of rArr(message, 'content')) {
           if (typeof b !== 'object' || b === null) continue;
           const block = b as Record<string, unknown>;
@@ -199,14 +234,37 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
         // isVisibleInTranscriptOnly, isMeta, the slash-command/command-output/task wrappers);
         // the interrupt marker becomes a structured InterruptEvent (symmetric with Codex),
         // never prose. Genuine prose (string OR array text blocks) emits a human MessageEvent.
+        // C6a: a slash-command line surfaces as a structured CommandEvent.
         const cls = classifyClaudeUser(line, message['content'], agent.kind === 'subagent');
         if (cls.kind === 'interrupt') {
           events.push({ type: 'interrupt', reason: 'interrupted', ...meta });
+        } else if (cls.kind === 'command') {
+          events.push({
+            type: 'command',
+            command: cls.command,
+            ...(cls.args ? { args: cls.args } : {}),
+            ...meta,
+          });
         } else if (cls.kind === 'message') {
           events.push({ type: 'message', role: 'user', text: cls.text, ...meta });
         }
       }
     });
+  }
+
+  // C6b: join the base-dir isMeta lines to their Skill events by tool_use block id, then drop
+  // the internal join key (it is not part of the public SkillEvent shape, never rendered).
+  for (const e of events) {
+    if (e.type !== 'skill') continue;
+    const id = e.toolUseId;
+    if (id) {
+      const baseDir = baseDirByToolUseId.get(id);
+      if (baseDir) {
+        e.baseDir = baseDir;
+        e.origin = originFromBaseDir(baseDir);
+      }
+    }
+    delete e.toolUseId;
   }
 
   return assembleSession('claude', sessionId, observed, subagents, events);

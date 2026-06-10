@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "framework": "masquerade",
+  "claims": [
+    {
+      "id": "masquerade:prose-grep",
+      "says": "the agent claimed it verified the work",
+      "kind": "human-constraint",
+      "scope": { "kind": "whole-session" },
+      "source": { "kind": "in-blob", "blob": "parent", "fidelity": "derived" },
+      "predicate": {
+        "target": "message-text",
+        "role": "assistant",
+        "literalsOnly": true,
+        "scope": "transcript",
+        "matcher": "matches",
+        "value": ".*I verified.*"
+      }
+    }
+  ]
+}

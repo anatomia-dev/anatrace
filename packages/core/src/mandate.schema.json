@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://anatrace.dev/mandate.schema.json",
+  "title": "Mandate",
+  "description": "Phase C — the typed, cross-framework declaration of what the agent was supposed to do. The deterministic-vs-LLM boundary is a FIELD: only kind:'intent' forbids a predicate; a MandateClaim carries NO LLM-result field.",
+  "type": "object",
+  "required": ["schemaVersion", "framework", "claims"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "integer" },
+    "framework": { "type": "string", "minLength": 1 },
+    "claims": { "type": "array", "items": { "$ref": "#/definitions/MandateClaim" } }
+  },
+  "definitions": {
+    "ClaimKind": {
+      "enum": [
+        "dispatch",
+        "skill-announced",
+        "skill-invoked",
+        "command-run",
+        "file-scope",
+        "tdd-ordering",
+        "contract-matcher",
+        "artifact-saved",
+        "task-completed",
+        "human-constraint",
+        "intent"
+      ]
+    },
+    "SourceFidelity": { "enum": ["verbatim", "derived"] },
+    "ClaimSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "blob", "fidelity"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "in-blob" },
+            "blob": { "type": "string" },
+            "line": { "type": "integer" },
+            "fidelity": { "$ref": "#/definitions/SourceFidelity" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "workItemSlug", "path", "fidelity"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "cross-artifact" },
+            "workItemSlug": { "type": "string" },
+            "path": { "type": "string" },
+            "line": { "type": "integer" },
+            "fidelity": { "$ref": "#/definitions/SourceFidelity" }
+          }
+        }
+      ]
+    },
+    "AgentScope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": { "kind": { "const": "root" } }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "subagentId"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "subagent" },
+            "subagentId": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "ClaimScope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": { "kind": { "const": "whole-session" } }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "opensOn", "closesOn", "agentScope"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "event-triggered-window" },
+            "opensOn": { "enum": ["skill-announced", "skill-invoked", "dispatch", "command"] },
+            "closesOn": {
+              "enum": [
+                "rest-of-session",
+                "next-skill-announce",
+                "next-same-skill-announce",
+                "marker-text",
+                "scope-depth"
+              ]
+            },
+            "marker": { "type": "string" },
+            "agentScope": { "$ref": "#/definitions/AgentScope" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": { "kind": { "const": "cross-session" } }
+        }
+      ]
+    },
+    "ClaimPredicate": {
+      "type": "object",
+      "required": ["target", "scope", "matcher"],
+      "properties": {
+        "target": {
+          "enum": [
+            "edit-paths",
+            "tool-names",
+            "read-paths",
+            "skill-events",
+            "message-text",
+            "subagent",
+            "file-content",
+            "event-order"
+          ]
+        },
+        "scope": { "enum": ["transcript", "runtime"] },
+        "matcher": {
+          "enum": [
+            "contains",
+            "not_contains",
+            "equals",
+            "not_equals",
+            "exists",
+            "matches",
+            "gte",
+            "lte"
+          ]
+        },
+        "value": { "type": ["string", "number"] },
+        "role": { "enum": ["user", "assistant"] },
+        "literalsOnly": { "const": true },
+        "guard": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "target": { "const": "message-text" } },
+            "required": ["target"]
+          },
+          "then": { "required": ["role", "literalsOnly"] }
+        }
+      ]
+    },
+    "MandateClaim": {
+      "type": "object",
+      "required": ["id", "says", "kind", "scope", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "says": { "type": "string" },
+        "kind": { "$ref": "#/definitions/ClaimKind" },
+        "scope": { "$ref": "#/definitions/ClaimScope" },
+        "source": { "$ref": "#/definitions/ClaimSource" },
+        "confidence": { "enum": ["low", "high"] },
+        "predicate": { "$ref": "#/definitions/ClaimPredicate" }
+      },
+      "allOf": [
+        {
+          "comment": "The boundary: only kind:'intent' FORBIDS a predicate.",
+          "if": { "properties": { "kind": { "const": "intent" } }, "required": ["kind"] },
+          "then": { "not": { "required": ["predicate"] } }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "framework": "spec-kit",
+  "claims": [
+    {
+      "id": "spec-kit:clarify-ambiguities",
+      "says": "Clarify all ambiguities in the spec before implementing",
+      "kind": "intent",
+      "scope": { "kind": "whole-session" },
+      "source": { "kind": "cross-artifact", "workItemSlug": "feat-x", "path": "spec.md", "fidelity": "verbatim" }
+    },
+    {
+      "id": "spec-kit:follow-tdd",
+      "says": "Follow test-driven development: write tests first",
+      "kind": "tdd-ordering",
+      "scope": { "kind": "whole-session" },
+      "source": { "kind": "cross-artifact", "workItemSlug": "feat-x", "path": "spec.md", "fidelity": "verbatim" }
+    },
+    {
+      "id": "spec-kit:mark-tasks-complete",
+      "says": "Mark each task [X] in tasks.md when done",
+      "kind": "task-completed",
+      "scope": { "kind": "whole-session" },
+      "source": { "kind": "cross-artifact", "workItemSlug": "feat-x", "path": "tasks.md", "fidelity": "verbatim" }
+    },
+    {
+      "id": "spec-kit:check-prerequisites",
+      "says": "Run check-prerequisites before starting implementation",
+      "kind": "command-run",
+      "scope": { "kind": "whole-session" },
+      "source": { "kind": "cross-artifact", "workItemSlug": "feat-x", "path": "implement.md", "fidelity": "verbatim" },
+      "predicate": {
+        "target": "tool-names",
+        "scope": "transcript",
+        "matcher": "contains",
+        "value": "Bash"
+      }
+    },
+    {
+      "id": "spec-kit:validate-output",
+      "says": "Validate the build output matches the acceptance criteria",
+      "kind": "contract-matcher",
+      "scope": { "kind": "whole-session" },
+      "source": { "kind": "cross-artifact", "workItemSlug": "feat-x", "path": "spec.md", "fidelity": "derived" },
+      "predicate": {
+        "target": "file-content",
+        "scope": "runtime",
+        "matcher": "exists"
+      }
+    }
+  ]
+}

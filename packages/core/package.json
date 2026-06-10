@@ -16,7 +16,7 @@
   "dependencies": {},
   "scripts": {
     "build": "tsdown",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.negative.json",
     "test": "vitest run",
     "lint": "eslint src"
   }

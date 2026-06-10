@@ -5,6 +5,7 @@ import { parseSession, analyze, skillsInvoked } from 'anatrace-core';
 import { discoverByPath, discoverLast } from './discover.js';
 import { renderJson, renderPretty } from './render.js';
 import { resolveConfig } from './config.js';
+import { mandateShow } from './mandate.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
@@ -45,6 +46,22 @@ program
     const report = analyze(session, config);
     const skills = skillsInvoked(session); // B2 — the SkillEvent consumer (render projection)
     process.stdout.write((opts.json ? renderJson(report, skills) : renderPretty(report, skills)) + '\n');
+  });
+
+// C5 — `anatrace mandate show <mandate-dir>`: the read-only mandate renderer + coverage stat.
+// Pure projection: NO verdicts, NO LLM (EXT.0-safe). Disk discovery lives in the CLI; core's
+// `extract` works on the NamedBlob[] bytes only.
+const mandate = program.command('mandate').description('inspect declared mandates (schema + coverage)');
+mandate
+  .command('show <mandate-dir>')
+  .description('extract + print the Mandate (claims + predicate-coverage stat) from a framework source dir')
+  .action((mandateDir: string) => {
+    const res = mandateShow(mandateDir);
+    if (!res.ok) {
+      process.stderr.write(res.message + '\n');
+      process.exit(1);
+    }
+    process.stdout.write(res.message + '\n');
   });
 
 program.parse();
