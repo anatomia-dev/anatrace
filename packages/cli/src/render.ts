@@ -1,5 +1,5 @@
 import { computeCost, PRICES } from 'anatrace-core';
-import type { Report } from 'anatrace-core';
+import type { Report, SkillInvocation } from 'anatrace-core';
 
 /**
  * Render-time cost projection. NOTE: `computeCost` returns a `CostResult` whose field is
@@ -11,13 +11,20 @@ function costProjection(report: Report): { usd: number; priced: boolean; priced_
   return { usd: c.cost_usd, priced: c.priced, priced_as_of: c.price_table_version };
 }
 
-/** JSON renderer: the stable `Report` envelope + a render-only cost projection (never `cost_usd`). */
-export function renderJson(report: Report): string {
-  return JSON.stringify({ ...report, cost_estimate: costProjection(report) }, null, 2);
+/** Render-only skills projection (B2). Like cost, skills are a render projection — NOT a `Report`/`ProvenanceCounts` field. */
+function skillsLabel(skills: SkillInvocation[]): string {
+  return skills
+    .map((s) => (s.source === 'announce-text' ? `${s.skill} (announced?)` : s.skill))
+    .join(', ');
 }
 
-/** Human (TTY) renderer: provenance + cost (est., priced-as-of) + friction. */
-export function renderPretty(report: Report): string {
+/** JSON renderer: the stable `Report` envelope + render-only projections (cost; skills) — never `cost_usd`. */
+export function renderJson(report: Report, skills: SkillInvocation[] = []): string {
+  return JSON.stringify({ ...report, cost_estimate: costProjection(report), skills }, null, 2);
+}
+
+/** Human (TTY) renderer: provenance + cost (est., priced-as-of) + skills + friction. */
+export function renderPretty(report: Report, skills: SkillInvocation[] = []): string {
   const { session, findings } = report;
   const t = session.counts.tokens;
   const cost = costProjection(report);
@@ -30,6 +37,7 @@ export function renderPretty(report: Report): string {
   lines.push(
     `  turns ${session.counts.turns} · tool_calls ${session.counts.tool_calls} · commands ${session.counts.commands_run} · files ${session.counts.files_touched}`,
   );
+  if (skills.length) lines.push(`  skills: ${skillsLabel(skills)}`);
   lines.push(
     cost.priced
       ? `  cost: ~$${cost.usd.toFixed(4)} (est. API-equivalent, priced as-of ${cost.priced_as_of})`

@@ -2,6 +2,8 @@ import type { Adapter, NamedBlob, AdapterCapabilities } from '../adapter.js';
 import { readJsonlLines } from '../adapter.js';
 import type { NormalizedSession, SessionEvent, EditEvent, AgentRef } from '../session.js';
 import { assembleSession, rStr, rNum, rObj, rArr, parseTs } from './shared.js';
+import { isCodexSynthetic } from './human.js';
+import { matchAnnouncedSkills } from '../skills.js';
 
 const ROOT: AgentRef = { kind: 'root' }; // Codex has no subagent sidecars
 
@@ -101,7 +103,17 @@ function parseCodex(group: NamedBlob[]): NormalizedSession | null {
           if (movePath && rStr(change, 'type') === 'update') {
             events.push({ type: 'edit', op: 'rename', paths: [pathKey, movePath], ...meta });
           } else {
-            events.push({ type: 'edit', op: changeOp(rStr(change, 'type')), paths: [pathKey], ...meta });
+            const op = changeOp(rStr(change, 'type'));
+            // B4 — Codex `add` carries the full new-file content; `update` carries a
+            // unified_diff (not folded → resolver nulls it, honest). Populate create content.
+            const fullContent = op === 'create' ? rStr(change, 'content') : '';
+            events.push({
+              type: 'edit',
+              op,
+              paths: [pathKey],
+              ...(op === 'create' && fullContent ? { fullContent } : {}),
+              ...meta,
+            });
           }
         }
       }
@@ -117,13 +129,23 @@ function parseCodex(group: NamedBlob[]): NormalizedSession | null {
 
     if (type === 'response_item') {
       if (ptype === 'message' && rStr(payload, 'role') === 'assistant') {
-        events.push({
-          type: 'message',
-          role: 'assistant',
-          ...(model ? { model } : {}),
-          text: messageText(rArr(payload, 'content')),
-          ...meta,
-        });
+        const text = messageText(rArr(payload, 'content'));
+        events.push({ type: 'message', role: 'assistant', ...(model ? { model } : {}), text, ...meta });
+        // B2/OQ5 — Codex has no Skill primitive; derive low-confidence skill signals from
+        // announce strings in assistant prose. Tagged 'announce-text' (never 'tool').
+        for (const skill of matchAnnouncedSkills(text)) {
+          events.push({ type: 'skill', skill, source: 'announce-text', ...meta });
+        }
+        return;
+      }
+      // B1 (symmetric) — emit genuine human prose; exclude Codex synthetic injections
+      // (# AGENTS.md / <environment_context> / <user_instructions> / <turn_aborted>) by
+      // STRUCTURAL marker only. `messageText` already decodes `input_text` blocks.
+      if (ptype === 'message' && rStr(payload, 'role') === 'user') {
+        const text = messageText(rArr(payload, 'content'));
+        if (text.trim() && !isCodexSynthetic(text)) {
+          events.push({ type: 'message', role: 'user', text, ...meta });
+        }
         return;
       }
       if (ptype === 'function_call' || ptype === 'custom_tool_call') {

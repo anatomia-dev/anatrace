@@ -90,3 +90,41 @@ describe('A4 — Codex adapter: exec_command vs write_stdin + move_path rename +
     expect(claudeAdapter.detect(enc(lines))).toBe(false);
   });
 });
+
+describe('A0 — detect-window robustness (metadata-front-loaded sessions)', () => {
+  // Real shape (corpus): sessions front-load agent-setting / last-prompt / permission-mode /
+  // mode / queue-operation metadata lines before the first real message. A real session
+  // (ebdf7d39) carries its first `user` line at index 49 — past the old first-8 window.
+  const metaPrefix = [
+    { type: 'agent-setting', agentSetting: 'opus' },
+    { type: 'last-prompt', value: 'continue' },
+    { type: 'permission-mode', mode: 'default' },
+    { type: 'mode', mode: 'normal' },
+    { type: 'queue-operation', op: 'enqueue' },
+    { type: 'agent-setting', agentSetting: 'sonnet' },
+    { type: 'permission-mode', mode: 'plan' },
+    { type: 'mode', mode: 'normal' },
+    { type: 'last-prompt', value: 'go' },
+    { type: 'agent-setting', agentSetting: 'opus' }, // 10 metadata lines — well past the old slice(0,8)
+  ];
+
+  it('detects a Claude session whose first 8+ lines are pure metadata', () => {
+    const userLine = {
+      type: 'user',
+      sessionId: 'sess-claude-meta',
+      uuid: 'u-1',
+      timestamp: '2026-06-08T00:00:10.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'hey ana' }] },
+    };
+    expect(claudeAdapter.detect(enc(jsonl([...metaPrefix, userLine])))).toBe(true);
+  });
+
+  it('does NOT over-detect a metadata-only stub (no conversation anywhere)', () => {
+    // The 3 corpus "failures" are 2-3-line abandoned stubs with no message → correctly false.
+    const stub = jsonl([
+      { type: 'last-prompt', value: 'x' },
+      { type: 'permission-mode', mode: 'default' },
+    ]);
+    expect(claudeAdapter.detect(enc(stub))).toBe(false);
+  });
+});

@@ -39,7 +39,7 @@ describe('A8 — friction rules via analyze()', () => {
     ];
     const report = analyze(session(events));
     expect(report.findings.length).toBe(2);
-    expect(report.findings.map((f) => f.ruleId).sort()).toEqual(['claude-tool-failure', 'codex-interrupt']);
+    expect(report.findings.map((f) => f.ruleId).sort()).toEqual(['claude-tool-failure', 'interrupt']);
   });
 
   it('a clean session → 0 findings, with a populated session summary', () => {
@@ -51,6 +51,6 @@ describe('A8 — friction rules via analyze()', () => {
     expect(report.findings.length).toBe(0);
     expect(report.session.harness).toBe('claude');
     expect(report.session.model).toBe('claude-opus-4-8');
-    expect(report.schemaVersion).toBe(1);
+    expect(report.schemaVersion).toBe(2); // A5 — Report v2
   });
 });

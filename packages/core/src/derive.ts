@@ -2,8 +2,14 @@ import type { NormalizedSession, UsageEvent } from './session.js';
 import type { ProvenanceCounts, TokenCounts } from './provenance.js';
 import { PRICE_TABLE_VERSION } from './pricing.js';
 
-/** The first CORRECTED anatrace derive (REQ Item 4). Bump when a frozen-tier value moves. */
-export const DERIVE_VERSION = '1';
+/**
+ * Derive version (REQ Item 4). Bump when a value the derive produces moves for identical
+ * bytes. `'2'` (B1): emitting human `MessageEvent`s carries user-line timestamps into the
+ * `minTs`/`maxTs` window, so `duration_ms` can widen for identical bytes. The bit-frozen
+ * tier is UNAFFECTED — `foldTokens` reads only `usage` events and `turns` is
+ * assistant-guarded — so ONLY `duration_ms` moves vs `'1'`, and the bump gates exactly that.
+ */
+export const DERIVE_VERSION = '2';
 
 /** Tool names that count as a shell command (REQ Item 3). `write_stdin` is excluded upstream. */
 const COMMAND_TOOLS = new Set(['Bash', 'exec_command']);

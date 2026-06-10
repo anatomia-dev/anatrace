@@ -3,6 +3,7 @@ import { readJsonlLines, parseJsonObject } from '../adapter.js';
 import type { NormalizedSession, SessionEvent, AgentRef, SubagentMeta } from '../session.js';
 import type { TokenCounts } from '../provenance.js';
 import { assembleSession, rStr, rNum, rObj, rArr, parseTs } from './shared.js';
+import { classifyClaudeUser } from './human.js';
 
 const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 const FANOUT_TOOLS = new Set(['Agent', 'Task']); // Agent is current; Task is back/forward-compat alias
@@ -21,8 +22,15 @@ function tokenTotal(t: TokenCounts): number {
 const capabilities: AdapterCapabilities = { supportsCacheCreate: true, tokenTotalSuspect: false };
 
 function detectClaude(bytes: Uint8Array): boolean {
-  // Bounded: inspect only the first handful of lines.
-  const lines = readJsonlLines(bytes).slice(0, 8);
+  // A0: scan the whole (already-parsed) line set, not a bounded first-8 window. Claude
+  // sessions front-load arbitrarily many metadata lines (agent-setting / last-prompt /
+  // permission-mode / mode / queue-operation) before the first real message — a real
+  // session (ebdf7d39) carries its first `user` line at index 49, so a first-8 window
+  // silently dropped it on the `--last` path. Codex-exclusion stays exact: a Claude
+  // transcript never carries a `session_meta` line or a top-level `payload` object
+  // (verified 0/197398 lines across the corpus), so a whole-file exclusion scan cannot
+  // false-exclude a real Claude session.
+  const lines = readJsonlLines(bytes);
   for (const l of lines) {
     if (rStr(l, 'type') === 'session_meta') return false; // that's Codex
     if (rObj(l, 'payload')) return false; // Codex lines are payload-wrapped
@@ -138,13 +146,33 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
           const input = rObj(block, 'input');
           if (name === 'Skill') {
             const skill = rStr(input, 'command') || rStr(input, 'skill') || rStr(input, 'name');
-            events.push({ type: 'skill', skill, ...meta });
+            events.push({ type: 'skill', skill, source: 'tool', ...meta }); // B2: structured invocation, high-confidence
           } else if (EDIT_TOOLS.has(name)) {
             const fp = rStr(input, 'file_path');
+            // B4 — populate the EditEvent content carrier from the transcript: Write → full
+            // content; Edit/MultiEdit → string-replace hunks (the transcript-content resolver
+            // folds these). NotebookEdit carries no foldable content → resolver nulls it.
+            const carrier: { fullContent?: string; hunks?: { before: string; after: string }[] } = {};
+            if (name === 'Write') {
+              carrier.fullContent = rStr(input, 'content');
+            } else if (name === 'Edit') {
+              const before = rStr(input, 'old_string');
+              if (before) carrier.hunks = [{ before, after: rStr(input, 'new_string') }];
+            } else if (name === 'MultiEdit') {
+              const hunks: { before: string; after: string }[] = [];
+              for (const ed of rArr(input, 'edits')) {
+                if (typeof ed !== 'object' || ed === null) continue;
+                const eo = ed as Record<string, unknown>;
+                const before = rStr(eo, 'old_string');
+                if (before) hunks.push({ before, after: rStr(eo, 'new_string') });
+              }
+              if (hunks.length) carrier.hunks = hunks;
+            }
             events.push({
               type: 'edit',
               op: name === 'Write' ? 'create' : 'modify',
               paths: fp ? [fp] : [],
+              ...carrier,
               ...meta,
             });
           } else {
@@ -165,6 +193,17 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
             isError: block['is_error'] === true,
             ...meta,
           });
+        }
+        // B1 — human prose / structured interrupt. The discriminator excludes ALL
+        // machine-authored user-role lines (sidechain/sidecar, isCompactSummary,
+        // isVisibleInTranscriptOnly, isMeta, the slash-command/command-output/task wrappers);
+        // the interrupt marker becomes a structured InterruptEvent (symmetric with Codex),
+        // never prose. Genuine prose (string OR array text blocks) emits a human MessageEvent.
+        const cls = classifyClaudeUser(line, message['content'], agent.kind === 'subagent');
+        if (cls.kind === 'interrupt') {
+          events.push({ type: 'interrupt', reason: 'interrupted', ...meta });
+        } else if (cls.kind === 'message') {
+          events.push({ type: 'message', role: 'user', text: cls.text, ...meta });
         }
       }
     });
