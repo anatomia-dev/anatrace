@@ -94,6 +94,11 @@ function parseCodex(group: NamedBlob[]): NormalizedSession | null {
     }
 
     if (type === 'event_msg' && ptype === 'patch_apply_end') {
+      // FI-13 scope note (Claude-only): the void-by-error handling in content.ts joins an
+      // Edit/Write's tool_use id to its is_error tool_result. Codex has no such link — the edit
+      // IS the patch_apply_end event and carries no tool_use_id, and the only isError signal lives
+      // on separate exec_command (function_call_output) results, not on patch edits. No clean void
+      // path exists here, so no symmetric toolUseId is threaded onto Codex EditEvents.
       const changes = rObj(payload, 'changes');
       if (changes) {
         for (const pathKey of Object.keys(changes)) {

@@ -18,6 +18,16 @@ function assistantWithTools(tools: unknown[], ts: string): Record<string, unknow
   };
 }
 const tool = (name: string, input: unknown) => ({ type: 'tool_use', name, input });
+const toolWithId = (name: string, input: unknown, id: string) => ({ type: 'tool_use', id, name, input });
+function userToolResult(toolUseId: string, isError: boolean, ts: string): Record<string, unknown> {
+  return {
+    type: 'user',
+    sessionId: 's',
+    uuid: `ur-${ts}`,
+    timestamp: ts,
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, is_error: isError, content: isError ? 'error' : 'ok' }] },
+  };
+}
 
 describe('B4 — transcript-content resolver (pure, no disk; honest null)', () => {
   it('returns FULL content for a Write-originated file', () => {
@@ -96,6 +106,38 @@ describe('B4 — transcript-content resolver (pure, no disk; honest null)', () =
     ]);
     const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(lines) }])!;
     expect(transcriptContentResolver(s)('/r/a.ts')).toBeNull();
+  });
+
+  it('FI-13: a VOIDED Write (adjacent tool_result is_error:true) → honest null (FS never held those bytes)', () => {
+    const lines = jsonl([
+      assistantWithTools([toolWithId('Write', { file_path: '/r/weak.test.ts', content: 'export const stub = true;\n' }, 'tu-void')], '2026-06-08T00:00:01.000Z'),
+      userToolResult('tu-void', true, '2026-06-08T00:00:02.000Z'),
+    ]);
+    const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(lines) }])!;
+    expect(transcriptContentResolver(s)('/r/weak.test.ts')).toBeNull();
+  });
+
+  it('FI-13: a voided Edit on a Write-created file leaves the path at its pre-void content (voided hunk not folded)', () => {
+    const lines = jsonl([
+      assistantWithTools([toolWithId('Write', { file_path: '/r/a.ts', content: 'const x = 1;' }, 'tu-ok')], '2026-06-08T00:00:01.000Z'),
+      userToolResult('tu-ok', false, '2026-06-08T00:00:02.000Z'),
+      assistantWithTools([toolWithId('Edit', { file_path: '/r/a.ts', old_string: 'const x = 1;', new_string: 'const x = 2;' }, 'tu-voided')], '2026-06-08T00:00:03.000Z'),
+      userToolResult('tu-voided', true, '2026-06-08T00:00:04.000Z'),
+    ]);
+    const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(lines) }])!;
+    // the voided Edit is skipped → content stays at the (non-voided) Write base, not the edited bytes
+    expect(dec(transcriptContentResolver(s)('/r/a.ts'))).toBe('const x = 1;');
+  });
+
+  it('FI-13: a NON-voided edit (is_error:false result) still folds normally — fix does not weaken the happy path', () => {
+    const lines = jsonl([
+      assistantWithTools([toolWithId('Write', { file_path: '/r/a.ts', content: 'const x = 1;' }, 'tu-w')], '2026-06-08T00:00:01.000Z'),
+      userToolResult('tu-w', false, '2026-06-08T00:00:02.000Z'),
+      assistantWithTools([toolWithId('Edit', { file_path: '/r/a.ts', old_string: 'const x = 1;', new_string: 'const x = 2;' }, 'tu-e')], '2026-06-08T00:00:03.000Z'),
+      userToolResult('tu-e', false, '2026-06-08T00:00:04.000Z'),
+    ]);
+    const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(lines) }])!;
+    expect(dec(transcriptContentResolver(s)('/r/a.ts'))).toBe('const x = 2;');
   });
 
   it('Codex `add` carries full content; `update` (unified_diff) → honest null', () => {

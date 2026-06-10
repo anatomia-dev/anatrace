@@ -21,8 +21,19 @@ declare const TextEncoder: { new (): { encode(input?: string): Uint8Array } };
 export function transcriptContentResolver(session: NormalizedSession): ContentResolver {
   const content = new Map<string, string | null>();
 
+  // FI-13 (faithful-or-null): an Edit/Write whose adjacent tool_result was is_error:true was
+  // VOIDED — the filesystem never received those bytes. Collect the voided tool_use ids and SKIP
+  // the matching EditEvents below so the fold never replays bytes the FS never held. A path whose
+  // ONLY basis was a voided edit therefore resolves null. (Claude-only: Codex patch_apply_end has
+  // no edit↔result tool_use_id link to void by — see adapters/codex.ts.)
+  const erroredToolUseIds = new Set<string>();
+  for (const e of session.events) {
+    if (e.type === 'toolResult' && e.isError === true && e.toolUseId) erroredToolUseIds.add(e.toolUseId);
+  }
+
   for (const e of session.events) {
     if (e.type !== 'edit') continue;
+    if (e.toolUseId && erroredToolUseIds.has(e.toolUseId)) continue; // FI-13: voided edit — do not fold
     const path = e.paths[0];
     if (e.op === 'create') {
       if (path) content.set(path, typeof e.fullContent === 'string' ? e.fullContent : null);
