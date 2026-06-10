@@ -23,10 +23,31 @@ export const CLAUDE_INTERRUPT_RE = /^\[Request interrupted by user[^\]]*\]$/;
  * Claude synthetic wrapper tags — EXACT leading-tag match (NOT a blanket `<`: a byte-census
  * found 0 genuine `<`-leading prose, and an exact list still protects future `<3`/code prose).
  * command-name/command-message = slash-command machinery; local-command-stdout = its output;
- * task-notification = a background-task injection. All model/harness-authored, never human.
+ * task-notification = a background-task injection; command-args = slash-command arguments
+ * (C6a/FI-10 — added so a STRAY `<command-args>` line is excluded from prose even though the
+ * normal `<command-name>` line is surfaced as a CommandEvent below). All model/harness-authored.
  */
 export const CLAUDE_SYNTHETIC_TAG_RE =
-  /^\s*<(command-name|command-message|local-command-stdout|task-notification)>/;
+  /^\s*<(command-name|command-message|command-args|local-command-stdout|task-notification)>/;
+
+/**
+ * A slash-command line (C6a): `<command-name>/foo</command-name>` with an optional
+ * `<command-args>…</command-args>`. Extract `{command, args}` from the FIRST `<command-name>`
+ * (the line may also carry a `<command-message>` echo, which we ignore). Returns `null` when
+ * the text does not lead with `<command-name>`.
+ */
+const COMMAND_NAME_RE = /<command-name>([^<]*)<\/command-name>/;
+const COMMAND_ARGS_RE = /<command-args>([^<]*)<\/command-args>/;
+export function parseCommandLine(text: string): { command: string; args?: string } | null {
+  if (!/^\s*<command-name>/.test(text)) return null;
+  const nameM = COMMAND_NAME_RE.exec(text);
+  if (!nameM) return null;
+  const command = (nameM[1] ?? '').trim();
+  if (!command) return null;
+  const argsM = COMMAND_ARGS_RE.exec(text);
+  const args = argsM ? (argsM[1] ?? '').trim() : '';
+  return args ? { command, args } : { command };
+}
 
 /** Codex synthetic injections — structural markers only (genuine prose like "hey ana" emits). */
 export const CODEX_SYNTHETIC_RE =
@@ -35,6 +56,7 @@ export const CODEX_SYNTHETIC_RE =
 export type ClaudeUserKind =
   | { kind: 'message'; text: string }
   | { kind: 'interrupt' }
+  | { kind: 'command'; command: string; args?: string }
   | { kind: 'skip' };
 
 /**
@@ -79,6 +101,10 @@ export function classifyClaudeUser(
   }
   const text = claudeUserText(content);
   if (CLAUDE_INTERRUPT_RE.test(text.trim())) return { kind: 'interrupt' };
+  // C6a: surface a slash-command line as a structured CommandEvent (instead of skipping it).
+  // Must run BEFORE the synthetic-tag skip (which now also denylists <command-args> for prose).
+  const cmd = parseCommandLine(text);
+  if (cmd) return { kind: 'command', ...cmd };
   if (CLAUDE_SYNTHETIC_TAG_RE.test(text)) return { kind: 'skip' };
   if (!text.trim()) return { kind: 'skip' };
   return { kind: 'message', text };

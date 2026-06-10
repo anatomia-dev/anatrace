@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "framework": "frameworkless",
+  "claims": [
+    {
+      "id": "human:no-touch-config",
+      "says": "Do not modify the production config file",
+      "kind": "human-constraint",
+      "scope": { "kind": "whole-session" },
+      "source": { "kind": "in-blob", "blob": "parent", "line": 12, "fidelity": "verbatim" },
+      "predicate": {
+        "target": "edit-paths",
+        "scope": "transcript",
+        "matcher": "not_contains",
+        "value": "config/production.json"
+      }
+    },
+    {
+      "id": "human:run-tests",
+      "says": "Make sure you run the test suite before you finish",
+      "kind": "command-run",
+      "scope": { "kind": "whole-session" },
+      "source": { "kind": "in-blob", "blob": "parent", "line": 14, "fidelity": "derived" },
+      "predicate": {
+        "target": "tool-names",
+        "scope": "transcript",
+        "matcher": "contains",
+        "value": "Bash"
+      }
+    },
+    {
+      "id": "human:be-thorough",
+      "says": "Please be thorough and write clean, idiomatic code",
+      "kind": "intent",
+      "scope": { "kind": "whole-session" },
+      "source": { "kind": "in-blob", "blob": "parent", "line": 16, "fidelity": "verbatim" }
+    }
+  ]
+}

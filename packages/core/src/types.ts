@@ -1,4 +1,8 @@
 import type { NormalizedSession } from './session.js';
+import type { NamedBlob } from './adapter.js';
+import type { Mandate } from './mandate.js';
+
+export type { Mandate } from './mandate.js';
 
 /**
  * Active severity = the configurable gate level (ESLint-style). The level lives in
@@ -23,20 +27,26 @@ export interface Finding {
   location?: { file: string; line?: number };
 }
 
-/** @experimental Declared, ZERO implementations in R2 (REQ Item 5 — lock the seam). */
-export interface Mandate {
-  schemaVersion: number;
-  framework: string;
-  claims: unknown[];
-}
 /** @experimental Opaque marker; do NOT pre-spec a bytes payload (REQ Item 5). */
 export interface RepoSnapshot {
   schemaVersion: number;
 }
-/** @experimental Symmetric to {@link import('./adapter.js').Adapter}; no impl in R2. */
+/**
+ * @experimental A framework mandate extractor — symmetric to
+ * {@link import('./adapter.js').Adapter} (`detect`/`parse`). C2 double-fix:
+ *  - `detect(group)` takes a `NamedBlob[]` (a single blob cannot carry a multi-file mandate).
+ *  - `extract(group) → Mandate | null` is added — degrade-to-null, NEVER throws.
+ *
+ * `extract` stays PURE: it reads only the bytes in `group`. The on-disk content a predicate
+ * references arrives via the injected {@link ContentResolver} at D, NEVER at extract.
+ *
+ * Reshaped safely on its `@experimental` marker (no known external implementor); it is a
+ * published type, so the justification is `@experimental`, not "zero callers".
+ */
 export interface MandateAdapter {
   framework: string;
-  detect(bytes: Uint8Array): boolean;
+  detect(group: NamedBlob[]): boolean;
+  extract(group: NamedBlob[]): Mandate | null;
 }
 
 /**

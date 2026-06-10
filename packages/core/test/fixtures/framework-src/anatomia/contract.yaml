@@ -1,0 +1,20 @@
+version: "1.0"
+sealed_by: "AnaPlan"
+feature: "Add callout file field"
+
+file_changes:
+  - path: "packages/cli/src/types/proof.ts"
+    action: modify
+  - path: "packages/cli/src/utils/proofSummary.ts"
+    action: modify
+
+assertions:
+  - id: A001
+    says: "proofSummary surfaces the callout file path"
+    target: "output.proofSummary"
+    matcher: "contains"
+    value: ".ts"
+  - id: A002
+    says: "the schema validates the new field"
+    target: "result.schemaValidation"
+    matcher: "exists"

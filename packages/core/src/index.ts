@@ -22,6 +22,35 @@ export type {
   Config,
 } from './types.js';
 
+// The Mandate schema (Phase C — the moat). The boundary-as-a-field keystone.
+export { validateMandate, isValidMandate } from './mandate-validate.js';
+export {
+  coverageStat,
+  isTranscriptCheckable,
+  renderCoverageLine,
+} from './mandate-coverage.js';
+export type { CoverageStat } from './mandate-coverage.js';
+export type {
+  MandateClaim,
+  IntentClaim,
+  CheckableClaim,
+  ClaimKind,
+  ClaimScope,
+  ClaimPredicate,
+  MessageTextPredicate,
+  GenericPredicate,
+  ClaimSource,
+  SourceFidelity,
+  PredicateTarget,
+  PredicateScope,
+  PredicateGuard,
+  Matcher,
+  Matcher as PredicateMatcher,
+  WindowOpensOn,
+  WindowClosesOn,
+  AgentScope,
+} from './mandate.js';
+
 // The subagent-aware ordered timeline (Item 1).
 export type {
   Harness,
@@ -32,8 +61,10 @@ export type {
   ToolEvent,
   ToolResultEvent,
   SkillEvent,
+  SkillOrigin,
   InterruptEvent,
   UsageEvent,
+  CommandEvent,
   SessionEventBody,
   SessionEvent,
   NormalizedSession,
@@ -70,3 +101,8 @@ export { FRICTION_RULES, FRICTION_PACK, FRICTION_DEFAULT_SEVERITY } from './rule
 // The adapters (Item 3).
 export { claudeAdapter } from './adapters/claude.js';
 export { codexAdapter } from './adapters/codex.js';
+
+// The reference mandate adapters (C3) + their registry.
+export { anatomiaAdapter } from './adapters/anatomia.js';
+export { superpowersAdapter } from './adapters/superpowers.js';
+export { MANDATE_ADAPTERS, detectMandateAdapter } from './adapters/mandate-registry.js';

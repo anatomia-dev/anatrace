@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [],
+    "moduleResolution": "nodenext",
+    "module": "nodenext",
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["test/types/boundary.type-test.ts", "src"]
+}

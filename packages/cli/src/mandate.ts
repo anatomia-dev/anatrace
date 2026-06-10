@@ -1,0 +1,117 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {
+  detectMandateAdapter,
+  validateMandate,
+  coverageStat,
+  renderCoverageLine,
+} from 'anatrace-core';
+import type { NamedBlob, Mandate, MandateClaim, ContentResolver } from 'anatrace-core';
+
+/**
+ * `anatrace mandate show` — the C5 read-only renderer. PURE PROJECTION: it extracts a Mandate
+ * from the framework source files and prints the claims + the predicate-coverage stat. NO
+ * verdicts, NO LLM (EXT.0-safe). Disk discovery lives HERE (the CLI), never in core; core
+ * `extract` works on the `NamedBlob[]` bytes only.
+ *
+ * `cross-artifact` claim sources (e.g. a `contract.yaml` referenced by slug) are resolved
+ * slug→bytes via the injected `ContentResolver` (OQ-C4) — core never touches disk.
+ */
+
+/** Recursively read the mandate-source files under a directory as canonical NamedBlobs. */
+function readMandateDir(dir: string): NamedBlob[] {
+  const blobs: NamedBlob[] = [];
+  const walk = (d: string, rel: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const abs = path.join(d, e.name);
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) walk(abs, r);
+      else if (e.isFile() && (e.name.endsWith('.md') || /\.ya?ml$/.test(e.name))) {
+        try {
+          blobs.push({ name: r, bytes: new Uint8Array(fs.readFileSync(abs)) });
+        } catch {
+          /* skip unreadable */
+        }
+      }
+    }
+  };
+  walk(dir, '');
+  return blobs;
+}
+
+/** A disk-backed ContentResolver for the CLI (cross-artifact slug→bytes). Core never calls this inline. */
+export function fsContentResolver(root: string): ContentResolver {
+  return (p: string): Uint8Array | null => {
+    try {
+      const abs = path.isAbsolute(p) ? p : path.join(root, p);
+      return new Uint8Array(fs.readFileSync(abs));
+    } catch {
+      return null;
+    }
+  };
+}
+
+function predicateLabel(c: MandateClaim): string {
+  if (!c.predicate) return c.kind === 'intent' ? 'intent' : 'intent (→ your model)';
+  const p = c.predicate;
+  const v = p.value !== undefined ? ` ${JSON.stringify(p.value)}` : '';
+  const conf = c.confidence ? ` {${c.confidence}}` : '';
+  return `${p.target} ${p.matcher}${v} [${p.scope}]${conf}`;
+}
+
+/** Render the extracted mandate: claims + the honest per-claim coverage stat. */
+export function renderMandate(mandate: Mandate): string {
+  const lines: string[] = [];
+  lines.push(`mandate — ${mandate.framework} (${mandate.claims.length} claim(s))`);
+  for (const c of mandate.claims) {
+    const scopeLabel =
+      c.scope.kind === 'event-triggered-window'
+        ? `window:${c.scope.opensOn}→${c.scope.closesOn}`
+        : c.scope.kind;
+    lines.push(`  • [${c.kind}] ${c.id}`);
+    lines.push(`      says: ${c.says}`);
+    lines.push(`      scope: ${scopeLabel} · ${predicateLabel(c)} · source:${c.source.fidelity}`);
+  }
+  const stat = coverageStat(mandate);
+  lines.push('');
+  lines.push(`  ${renderCoverageLine(stat)}`);
+  return lines.join('\n');
+}
+
+export interface MandateShowResult {
+  ok: boolean;
+  message: string;
+}
+
+/**
+ * Resolve the mandate source dir → adapter → extracted Mandate → rendered output. Returns
+ * `{ok:false}` with a message when no adapter matches or extraction yields nothing.
+ */
+export function mandateShow(mandateDir: string): MandateShowResult {
+  if (!fs.existsSync(mandateDir)) {
+    return { ok: false, message: `anatrace: mandate source not found: ${mandateDir}` };
+  }
+  const group = readMandateDir(mandateDir);
+  if (!group.length) {
+    return { ok: false, message: `anatrace: no mandate source files under ${mandateDir}` };
+  }
+  const adapter = detectMandateAdapter(group);
+  if (!adapter) {
+    return { ok: false, message: 'anatrace: no mandate framework detected in the source files.' };
+  }
+  const mandate = adapter.extract(group);
+  if (!mandate) {
+    return { ok: false, message: `anatrace: ${adapter.framework} adapter extracted no claims.` };
+  }
+  const errs = validateMandate(mandate);
+  if (errs.length) {
+    return { ok: false, message: `anatrace: invalid mandate:\n  ${errs.join('\n  ')}` };
+  }
+  return { ok: true, message: renderMandate(mandate) };
+}

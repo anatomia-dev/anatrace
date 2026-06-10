@@ -51,16 +51,48 @@ export interface ToolResultEvent {
 }
 /** Skill-signal provenance (B2). 'tool' = a structured Skill invocation (Claude, high-confidence); 'announce-text' = a portable announce-string match (Codex has no Skill primitive — low-confidence, OQ5). */
 export type SkillSource = 'tool' | 'announce-text';
+/** Skill ORIGIN (C6b) — decided by the base-dir PATH, never the skill name. */
+export type SkillOrigin = 'stock' | 'plugin' | 'project' | 'personal';
 export interface SkillEvent {
   type: 'skill';
   skill: string;
   /** B2: how the skill signal was derived; absent ⇒ treat as 'tool' (the R2 default). */
   source?: SkillSource;
+  /**
+   * C6b: the skill's base directory, joined from the `"Base directory for this skill: …"`
+   * isMeta line via `sourceToolUseID == this Skill tool_use block id`. Optional (absent when
+   * the line is missing). Non-folded — `deriveCounts` has no `skill` case, so counts-neutral.
+   */
+  baseDir?: string;
+  /** C6b: derived from {@link baseDir} (stock/plugin/project/personal). */
+  origin?: SkillOrigin;
+  /**
+   * @internal C6b join key — the Skill `tool_use` BLOCK id (NOT `message.id`). Used to join
+   * the base-dir isMeta line; not rendered, not counted. Present only during assembly.
+   */
+  toolUseId?: string;
 }
 /** Structured interrupt vocabulary (Codex turn_aborted.reason==='interrupted'). */
 export interface InterruptEvent {
   type: 'interrupt';
   reason: string;
+}
+
+/**
+ * A typed slash-command invocation (C6a). Surfaced from the `<command-name>`/`<command-args>`
+ * synthetic-tag lines the B1 discriminator otherwise SKIPs — the `command-run`/`dispatch`
+ * mandate kinds want it. NET-NEW union member (additive).
+ *
+ * ⛔ DETERMINISM/BIT-FREEZE: a `CommandEvent` is NOT a shell-command tool — it MUST NOT feed
+ * `deriveCounts`/`commands_run` (`derive.ts` counts only `COMMAND_TOOLS = {Bash, exec_command}`
+ * on `'tool'` events; this falls through the switch `default`). It carries its own `ts` like
+ * every other event, so `minTs`/`maxTs` (and thus `duration_ms`) may widen — gated by the
+ * derive-diff (B1 precedent), NOT a frozen-tier move.
+ */
+export interface CommandEvent {
+  type: 'command';
+  command: string;
+  args?: string;
 }
 
 /**
@@ -95,7 +127,8 @@ export type SessionEventBody =
   | ToolResultEvent
   | SkillEvent
   | InterruptEvent
-  | UsageEvent;
+  | UsageEvent
+  | CommandEvent;
 
 export type SessionEvent = SessionEventBody & {
   agent: AgentRef;
