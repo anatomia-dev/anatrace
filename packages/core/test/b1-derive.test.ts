@@ -14,19 +14,25 @@ const base = (): SessionEvent[] => {
     ev({ type: 'message', role: 'assistant', model: 'claude-opus-4-8' }, 1000),
     ev({ type: 'usage', usage: { input: 10, output: 20, cache_create: 0, cache_read: 0 }, messageId: 'm1', isSidechain: false, cumulative: false }, 1000),
     ev({ type: 'tool', name: 'Bash' }, 2000),
-    ev({ type: 'toolResult', text: '3 passed', isError: false }, 3000),
+    // forTool:'Bash' so the FI-2 runner-gate (DERIVE_VERSION '3') counts this runner result.
+    ev({ type: 'toolResult', text: '3 passed', isError: false, forTool: 'Bash' }, 3000),
   ];
 };
 
 /**
  * B1.d — emitting human MessageEvents carries user-line timestamps into the min/max window,
- * so `duration_ms` can widen for identical bytes → DERIVE_VERSION bumped to '2'. The frozen
- * tier is SAFE (foldTokens reads only `usage`; turns is assistant-guarded). This proves the
- * delta is EXACTLY `duration_ms`, in BOTH directions.
+ * so `duration_ms` can widen for identical bytes. The frozen tier is SAFE (foldTokens reads
+ * only `usage`; turns is assistant-guarded). This proves the delta is EXACTLY `duration_ms`,
+ * in BOTH directions.
+ *
+ * DERIVE_VERSION is now '3' (D-DERIVE / FI-2 runner-gate): `parseTestCounts` is gated to
+ * COMMAND_TOOLS results via `forTool`. The base fixture's runner result carries `forTool:'Bash'`
+ * so the count semantics are unchanged here; the gate's demotion of NON-runner echoes is
+ * exercised in d-derive.test.ts.
  */
 describe('B1.d — determinism diff: ONLY duration_ms moves (both directions)', () => {
-  it('DERIVE_VERSION is bumped to "2"', () => {
-    expect(DERIVE_VERSION).toBe('2');
+  it('DERIVE_VERSION is bumped to "3" (D-DERIVE / FI-2 runner-gate)', () => {
+    expect(DERIVE_VERSION).toBe('3');
   });
 
   it('direction A — a human message + interrupt OUTSIDE the window: ONLY duration_ms changes', () => {

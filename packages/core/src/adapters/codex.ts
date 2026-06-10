@@ -2,6 +2,17 @@ import type { Adapter, NamedBlob, AdapterCapabilities } from '../adapter.js';
 import { readJsonlLines } from '../adapter.js';
 import type { NormalizedSession, SessionEvent, EditEvent, AgentRef } from '../session.js';
 import { assembleSession, rStr, rNum, rObj, rArr, parseTs } from './shared.js';
+
+/** FI-16: safe-parse a Codex `function_call.arguments` JSON STRING into an input object, else null. */
+function parseArgsObject(s: string): Record<string, unknown> | null {
+  if (!s) return null;
+  try {
+    const o = JSON.parse(s);
+    return o && typeof o === 'object' && !Array.isArray(o) ? (o as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
 import { isCodexSynthetic } from './human.js';
 import { matchAnnouncedSkills } from '../skills.js';
 
@@ -60,6 +71,7 @@ function parseCodex(group: NamedBlob[]): NormalizedSession | null {
   }
 
   const events: SessionEvent[] = [];
+  const toolNameByCallId = new Map<string, string>(); // FI-2: function_call call_id → tool name (forTool join)
   let prevCumulative: number | undefined;
 
   lines.forEach((line, lineIndex) => {
@@ -154,7 +166,15 @@ function parseCodex(group: NamedBlob[]): NormalizedSession | null {
         return;
       }
       if (ptype === 'function_call' || ptype === 'custom_tool_call') {
-        events.push({ type: 'tool', name: rStr(payload, 'name'), ...meta });
+        const name = rStr(payload, 'name');
+        const callId = rStr(payload, 'call_id');
+        if (callId && name) toolNameByCallId.set(callId, name);
+        // FI-16: Codex dropped the call `arguments` (a JSON string) — parse it into an
+        // `input` object mirroring Claude's `ToolEvent.input` shape so `tool-names`/command
+        // prudence isn't `codex-blind` purely from a dropped payload. Degrade to absent on
+        // a non-object/unparseable argument (never throw).
+        const args = parseArgsObject(rStr(payload, 'arguments'));
+        events.push({ type: 'tool', name, ...(args ? { input: args } : {}), ...meta });
         return;
       }
       if (ptype === 'function_call_output' || ptype === 'custom_tool_call_output') {
@@ -166,7 +186,15 @@ function parseCodex(group: NamedBlob[]): NormalizedSession | null {
         // ToolResultEvent.isError shape the Claude adapter sets from tool_result.is_error.
         const m = text.match(/Process exited with code (\d+)/);
         const isError = m ? Number(m[1]) !== 0 : false;
-        events.push({ type: 'toolResult', text, ...(isError ? { isError } : {}), ...meta });
+        // FI-2: resolve `forTool` by joining call_id → the originating function_call name.
+        const forTool = toolNameByCallId.get(rStr(payload, 'call_id'));
+        events.push({
+          type: 'toolResult',
+          text,
+          ...(isError ? { isError } : {}),
+          ...(forTool ? { forTool } : {}),
+          ...meta,
+        });
         return;
       }
     }

@@ -43,7 +43,10 @@ program
       process.stderr.write(`anatrace: ${e instanceof Error ? e.message : String(e)}\n`);
       process.exit(1);
     }
-    const report = analyze(session, config);
+    // Supply the project root the CLI runs from so file-scope normalization can relativize
+    // ABSOLUTE non-worktree source edits (additive; with no mandate the compliance pass is a
+    // no-op, so this is byte-identical to before — it wires the root for when a mandate rides).
+    const report = analyze(session, config, undefined, undefined, process.cwd());
     const skills = skillsInvoked(session); // B2 — the SkillEvent consumer (render projection)
     process.stdout.write((opts.json ? renderJson(report, skills) : renderPretty(report, skills)) + '\n');
   });

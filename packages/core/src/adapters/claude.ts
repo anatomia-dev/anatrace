@@ -90,6 +90,7 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
   const seenVersions = new Set<string>();
   const lastTotalById = new Map<string, number>(); // monotonicity canary state
   const baseDirByToolUseId = new Map<string, string>(); // C6b: sourceToolUseID → base-dir
+  const toolNameByToolUseId = new Map<string, string>(); // FI-2: tool_use BLOCK id → tool name (forTool join)
   let sessionId = '';
 
   for (const blob of group) {
@@ -162,6 +163,10 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
           if (rStr(block, 'type') !== 'tool_use') continue;
           const name = rStr(block, 'name');
           const input = rObj(block, 'input');
+          // FI-2: record the originating tool name by its tool_use BLOCK id so the post-pass
+          // can stamp `forTool` on the matching tool_result (gates parseTestCounts to runners).
+          const blockId = rStr(block, 'id');
+          if (blockId && name) toolNameByToolUseId.set(blockId, name);
           if (name === 'Skill') {
             const skill = rStr(input, 'command') || rStr(input, 'skill') || rStr(input, 'name');
             // C6b: carry the tool_use BLOCK id (NOT message.id) as the base-dir join key.
@@ -262,17 +267,23 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
 
   // C6b: join the base-dir isMeta lines to their Skill events by tool_use block id, then drop
   // the internal join key (it is not part of the public SkillEvent shape, never rendered).
+  // FI-2: stamp `forTool` on each tool_result by joining its tool_use_id → the originating
+  // tool name (the toolResult KEEPS its toolUseId — FI-13 still needs it to void edits).
   for (const e of events) {
-    if (e.type !== 'skill') continue;
-    const id = e.toolUseId;
-    if (id) {
-      const baseDir = baseDirByToolUseId.get(id);
-      if (baseDir) {
-        e.baseDir = baseDir;
-        e.origin = originFromBaseDir(baseDir);
+    if (e.type === 'skill') {
+      const id = e.toolUseId;
+      if (id) {
+        const baseDir = baseDirByToolUseId.get(id);
+        if (baseDir) {
+          e.baseDir = baseDir;
+          e.origin = originFromBaseDir(baseDir);
+        }
       }
+      delete e.toolUseId;
+    } else if (e.type === 'toolResult' && e.toolUseId) {
+      const forTool = toolNameByToolUseId.get(e.toolUseId);
+      if (forTool) e.forTool = forTool;
     }
-    delete e.toolUseId;
   }
 
   return assembleSession('claude', sessionId, observed, subagents, events);

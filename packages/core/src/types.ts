@@ -73,10 +73,22 @@ export interface ParserCapability {
  */
 export type ContentResolver = (path: string) => Uint8Array | null;
 
-/** @experimental Phase-E judge input — the bounded, scrubbed dossier slice (shape reserved for Phase E). */
-export type JudgeInput = unknown;
-/** @experimental Phase-E judge output — a type-disjoint `JudgeVerdict` (shape reserved for Phase E). */
-export type JudgeOutput = unknown;
+import type { JudgeInput as JudgeInputT, JudgeVerdict as JudgeVerdictT } from './hook.js';
+
+/**
+ * @experimental Phase-E judge input — the bounded, scrubbed dossier SLICE (NOT the transcript;
+ * the cost lever). D-HOOK reshapes the prior `unknown` placeholder into a concrete frozen
+ * interface (licensed by the `@experimental` marker + a byte-verified ZERO external implementor —
+ * crack3d has 0 `JudgeInput`/`JudgeOutput` hits). The judge IMPL is injected at the CLI in E;
+ * core only declares the type.
+ */
+export type JudgeInput = JudgeInputT;
+/**
+ * @experimental Phase-E judge output — the type-DISJOINT `JudgeVerdict` (`source:'llm'`,
+ * `rationale`, `model`, NO `severity`). Literal-discriminant vs `ComplianceVerdict
+ * {source:'deterministic'}` so the deterministic channel can never leak prose.
+ */
+export type JudgeOutput = JudgeVerdictT;
 /**
  * @experimental The user's LLM judge — a function TYPE in core; the impl is injected at
  * the CLI (Phase E/E1), NEVER named or imported here. Adjudicates ONLY the `unverifiable`
@@ -134,8 +146,9 @@ export type RuleSetting = Severity | [Severity, RuleOptions];
 /**
  * ESLint-shaped config — DATA IN, nothing else. Core reads NO disk: the CLI does
  * discovery (A3) and hands a resolved `Config` to {@link import('./analyze.js').analyze}.
- * `extends` defaults to `['recommended']` (friction ∪ later compliance packs) when unset,
- * so the no-config path is byte-identical to R2.
+ * `extends` defaults to `['recommended']` (friction ONLY) when unset, so the no-config path
+ * is byte-identical to R2. Compliance is OPT-IN — a SEPARATE `compliance` pack, NEVER unioned
+ * into `recommended` (D-CONFIG; OQ-D10 resolved).
  *
  * @remarks The harness extensions (`mandates`/`claims`/`judge`) are DECLARED here but
  *   reserved for Phases C–E; `judge` is CONFIG ONLY (model + prompt) — the judge IMPL is
@@ -143,7 +156,7 @@ export type RuleSetting = Severity | [Severity, RuleOptions];
  */
 export interface Config {
   schemaVersion: number;
-  /** Pack resolution. `recommended` = friction ∪ later compliance packs (resolvePack). */
+  /** Pack resolution. `recommended` = friction ONLY; `compliance` is a SEPARATE opt-in pack (D-CONFIG). */
   extends?: string[];
   /**
    * Per-rule overrides. Keys are rule ids OR the reserved `plugin:ns/id` grammar

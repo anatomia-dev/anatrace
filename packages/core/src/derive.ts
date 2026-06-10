@@ -5,11 +5,16 @@ import { PRICE_TABLE_VERSION } from './pricing.js';
 /**
  * Derive version (REQ Item 4). Bump when a value the derive produces moves for identical
  * bytes. `'2'` (B1): emitting human `MessageEvent`s carries user-line timestamps into the
- * `minTs`/`maxTs` window, so `duration_ms` can widen for identical bytes. The bit-frozen
- * tier is UNAFFECTED — `foldTokens` reads only `usage` events and `turns` is
- * assistant-guarded — so ONLY `duration_ms` moves vs `'1'`, and the bump gates exactly that.
+ * `minTs`/`maxTs` window, so `duration_ms` can widen for identical bytes.
+ *
+ * `'3'` (D-DERIVE / FI-2): `parseTestCounts` is now GATED to RUNNER results (`COMMAND_TOOLS`
+ * via the new `ToolResultEvent.forTool`), so a `Read`/`Grep` result echoing "N passed" no
+ * longer inflates `tests_executed` (the phantom-test vector). This moves ONLY the demoted,
+ * best-effort `tests_executed`/`failures_encountered` counts on a fixture with a non-runner
+ * "N passed" echo — the bit-frozen tier (`tokens`/`model`/`price_table_version`/`derive_version`)
+ * is UNTOUCHED (`foldTokens` reads only `usage`). The bump gates exactly that demoted move.
  */
-export const DERIVE_VERSION = '2';
+export const DERIVE_VERSION = '3';
 
 /** Tool names that count as a shell command (REQ Item 3). `write_stdin` is excluded upstream. */
 const COMMAND_TOOLS = new Set(['Bash', 'exec_command']);
@@ -134,9 +139,16 @@ export function deriveCounts(session: NormalizedSession): ProvenanceCounts {
         for (const p of e.paths) filesTouched.add(p);
         break;
       case 'toolResult': {
-        const c = parseTestCounts(e.text ?? '');
-        testsExecuted += c.tests;
-        failuresEncountered += c.failures;
+        // FI-2 runner-gate: only parse "N passed"/"N failed" from a RUNNER result (a
+        // COMMAND_TOOL via `forTool`). A `Read`/`Grep` result echoing "N passed" (the
+        // phantom-test vector) is NOT a test run → never inflates `tests_executed`. When
+        // `forTool` is absent (older bytes / no join), we conservatively DO NOT count — "0
+        // tests" gates on no runner-evidence, never an accusation (Cracked's runner-gate spec).
+        if (e.forTool && COMMAND_TOOLS.has(e.forTool)) {
+          const c = parseTestCounts(e.text ?? '');
+          testsExecuted += c.tests;
+          failuresEncountered += c.failures;
+        }
         break;
       }
       default:
