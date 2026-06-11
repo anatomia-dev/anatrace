@@ -162,6 +162,8 @@ function dispatchTarget(
       return verdict(claim.id, 'unverifiable', codexBlindable(session) ? 'codex-blind' : 'low-confidence');
     case 'tool-names':
       return evalToolNames(claim, predicate, session, scopedEvents);
+    case 'command-content':
+      return evalCommandContent(claim, predicate, session, scopedEvents);
     case 'file-content':
       return evalFileContent(claim, predicate, resolver);
     case 'event-order':
@@ -320,6 +322,72 @@ function evalToolNames(
   }
   if (hit) return verdict(claim.id, 'satisfied', 'predicate-matched', [pointer(hit)]);
   if (codexBlindable(session)) return verdict(claim.id, 'unverifiable', 'codex-blind');
+  return verdict(claim.id, 'unverifiable', 'absent-signal');
+}
+
+// ─── command-content (command-run) — the FORBIDDEN-command direction ─────────────────────
+/**
+ * Pull the shell-command STRING from a `Bash` (Claude) / `exec_command` (Codex) tool event's
+ * `input.command`. The ONLY transcript locus of a run command — `ToolEvent.name` is just `'Bash'`,
+ * so a `tool-names` check can never see WHICH command ran. Returns `''` for any other tool.
+ */
+function commandStringOf(e: SessionEvent): string {
+  if (e.type !== 'tool') return '';
+  if (e.name !== 'Bash' && e.name !== 'exec_command') return '';
+  const input = e.input;
+  if (typeof input !== 'object' || input === null) return '';
+  const cmd = (input as Record<string, unknown>)['command'];
+  return typeof cmd === 'string' ? cmd : '';
+}
+
+/**
+ * The `command-content` evaluator — the narrowly-implemented `command-run` transcript check.
+ * Matches against a shell tool's `input.command` STRING. The Anatomia adapter emits it ONLY in
+ * the FORBIDDEN-command (negative-matcher) direction — "AnaVerify must not rebase/force-push the
+ * code branch" — so this mirrors {@link evalForbiddenEdit}'s honesty discipline:
+ *  - a NEGATIVE matcher (`not_contains`/`not_equals`) is the supported shape: ANY shell command
+ *    whose string matches the forbidden value → `violated`/`predicate-not-matched` with pointer
+ *    evidence; none match → `satisfied`/`predicate-matched` (the agent never ran it).
+ *  - a POSITIVE `contains`/`equals` ("the agent ran X") is supported too: a hit → satisfied,
+ *    absent → `unverifiable`/`absent-signal` (you can't prove a command WASN'T needed), Codex →
+ *    `codex-blind` only when no shell tool exists.
+ *  - a non-comparable matcher (`matches`/`gte`/`lte`) → `unverifiable`/`content-unresolvable`
+ *    (FI-17 totality — never a silent verdict).
+ * NOT codex-blind for the negative direction: Codex emits `exec_command`, so the forbidden-command
+ * check is cross-harness real.
+ */
+function evalCommandContent(
+  claim: MandateClaim,
+  predicate: ClaimPredicate,
+  session: NormalizedSession,
+  scopedEvents: SessionEvent[],
+): ComplianceVerdict {
+  // FI-17 — matcher totality: only the string-comparable matchers are mechanically applicable.
+  if (!isComparableMatcher(predicate.matcher)) {
+    return verdict(claim.id, 'unverifiable', 'content-unresolvable');
+  }
+  const needle = String(predicate.value ?? '');
+  const isNegative = NEGATIVE_MATCHERS.has(predicate.matcher);
+  const hits: SessionEvent[] = [];
+  for (const e of scopedEvents) {
+    const cmd = commandStringOf(e);
+    if (!cmd) continue;
+    if (matchStr(cmd, predicate.matcher, needle)) hits.push(e);
+  }
+  if (isNegative) {
+    // "must NOT run X": a matching command is a VIOLATION of the obligation.
+    if (hits.length > 0) {
+      return verdict(claim.id, 'violated', 'predicate-not-matched', hits.map(pointer));
+    }
+    return verdict(claim.id, 'satisfied', 'predicate-matched');
+  }
+  // Positive ("ran X"): a hit is satisfaction; absence is unprovable, never a violation.
+  if (hits.length > 0) {
+    return verdict(claim.id, 'satisfied', 'predicate-matched', hits.map(pointer));
+  }
+  // Only blind when the harness has no shell-tool primitive at all.
+  const hasShell = session.events.some((e) => e.type === 'tool' && (e.name === 'Bash' || e.name === 'exec_command'));
+  if (!hasShell && codexBlindable(session)) return verdict(claim.id, 'unverifiable', 'codex-blind');
   return verdict(claim.id, 'unverifiable', 'absent-signal');
 }
 

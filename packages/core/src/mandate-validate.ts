@@ -34,6 +34,7 @@ const CLAIM_KINDS: ReadonlySet<ClaimKind> = new Set<ClaimKind>([
 const TARGETS: ReadonlySet<PredicateTarget> = new Set<PredicateTarget>([
   'edit-paths',
   'tool-names',
+  'command-content',
   'read-paths',
   'skill-events',
   'message-text',
