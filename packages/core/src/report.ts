@@ -4,6 +4,14 @@ import type { Harness } from './session.js';
 import type { ComplianceVerdict } from './verdict.js';
 import type { Dossier } from './dossier.js';
 import type { HookRequest } from './hook.js';
+import type {
+  CompactionFacts,
+  ContextFacts,
+  EnvironmentFacts,
+  FlowFacts,
+  ScopeShapeFacts,
+} from './meta/facts.js';
+import type { GitOpsSummary } from './meta/git-ops.js';
 
 /**
  * The stable, versioned run-output envelope (REQ Item 10). Consumers script against it ⇒
@@ -35,6 +43,20 @@ export interface Report {
     observedVersions: string[];
     /** A5: absolute epoch-ms window of the session's timestamped events; absent when none carry a ts. */
     timeBounds?: { start: number; end: number };
+    /**
+     * Meta-facts (M1–M4) — ADDITIVE optional per-session FACTS blocks. Each is a pure
+     * projection of the parsed timeline, ZERO LLM, NO verdict, NO person-score, NO author/
+     * identity field (the bright line). A domain with no signal is OMITTED, so a v1 consumer
+     * and the R2 byte-identity are untouched; `schemaVersion` STAYS 2 (additive, A5/D precedent).
+     * VOLUME facts (`context`/`gitOps`) are root-scoped or root-vs-subagent split; PRESENCE facts
+     * (`environment`/`scopeShape`) use the flat root∪subagent union (the lane principle, ADD-1).
+     */
+    compaction?: CompactionFacts;
+    context?: ContextFacts;
+    gitOps?: GitOpsSummary;
+    environment?: EnvironmentFacts;
+    flow?: FlowFacts;
+    scopeShape?: ScopeShapeFacts;
   };
   findings: Finding[];
   /** D — per-claim deterministic verdicts (no severity/rationale/model); present iff a mandate was supplied. */

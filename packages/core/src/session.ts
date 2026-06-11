@@ -100,6 +100,38 @@ export interface InterruptEvent {
 }
 
 /**
+ * A structured CONTEXT-COMPACTION boundary on the timeline (meta-facts M1 / P1).
+ *
+ * Detected on the STRUCTURED marker ONLY — never a prose/substring scan:
+ *  - Claude: a `type:"system" / subtype:"compact_boundary"` line carrying
+ *    `compactMetadata:{ trigger, preTokens }` (byte-verified: 6 structured records in the
+ *    real corpus vs 44 files that merely MENTION the string — the substring trap the M1
+ *    fixture is committed to avoid).
+ *  - Codex: a `payload.type:"compacted"` event_msg (the harness's structured marker; the
+ *    companion `session_meta.source==="compact"` is a session-level signal, not a per-line
+ *    event). Codex carries no `preTokens`/`trigger`, so both are omitted there.
+ *
+ * ⚠️ CORRECTNESS HAZARD this fixes: a dropped boundary lets a summarized pre-compaction
+ * block be mis-read as raw content (corrupting the timeline / token accounting). Surfacing
+ * it explicitly is anatrace's own parse-fidelity fix AND the SHARED deliverable with the
+ * (not-yet-built) positive-obligations completeness signal — build once, both consume it.
+ *
+ * The boundary is ROOT-scoped by nature (subagents run in their own context windows and do
+ * not compact the parent), but the carrier is lane-tagged like every other event via the
+ * `SessionEvent` envelope, so a reader can still assert the lane.
+ *
+ * `schemaVersion` of the carrier itself is `1` (its own stamp, per the two-stamp rule); it is
+ * a net-new member of the `SessionEventBody` union and rides `Report.schemaVersion` 2 additively.
+ */
+export interface CompactBoundaryEvent {
+  type: 'compact';
+  /** Compaction trigger when the harness records one (Claude `compactMetadata.trigger`; only `"manual"` observed). Absent on Codex. */
+  trigger?: string;
+  /** The harness's own pre-compaction token total (Claude `compactMetadata.preTokens`). Absent on Codex. */
+  preTokens?: number;
+}
+
+/**
  * A typed slash-command invocation (C6a). Surfaced from the `<command-name>`/`<command-args>`
  * synthetic-tag lines the B1 discriminator otherwise SKIPs — the `command-run`/`dispatch`
  * mandate kinds want it. NET-NEW union member (additive).
@@ -148,6 +180,7 @@ export type SessionEventBody =
   | ToolResultEvent
   | SkillEvent
   | InterruptEvent
+  | CompactBoundaryEvent
   | UsageEvent
   | CommandEvent;
 

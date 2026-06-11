@@ -32,6 +32,7 @@ import type {
 import type { ContentResolver } from './types.js';
 import { readPathsOf } from './read-paths.js';
 import { skillsInvokedInScope } from './skills.js';
+import { commandStringOf } from './derive.js';
 import {
   classifyEditPath,
   normalizeEditPath,
@@ -326,19 +327,8 @@ function evalToolNames(
 }
 
 // ─── command-content (command-run) — the FORBIDDEN-command direction ─────────────────────
-/**
- * Pull the shell-command STRING from a `Bash` (Claude) / `exec_command` (Codex) tool event's
- * `input.command`. The ONLY transcript locus of a run command — `ToolEvent.name` is just `'Bash'`,
- * so a `tool-names` check can never see WHICH command ran. Returns `''` for any other tool.
- */
-function commandStringOf(e: SessionEvent): string {
-  if (e.type !== 'tool') return '';
-  if (e.name !== 'Bash' && e.name !== 'exec_command') return '';
-  const input = e.input;
-  if (typeof input !== 'object' || input === null) return '';
-  const cmd = (input as Record<string, unknown>)['command'];
-  return typeof cmd === 'string' ? cmd : '';
-}
+// `commandStringOf` (the shell-command-string extractor) moved to the shared `derive.ts` home
+// (next to `COMMAND_TOOLS`) and is now EXPORTED (S3) — the M2 git-ops projection reuses it.
 
 /**
  * The `command-content` evaluator — the narrowly-implemented `command-run` transcript check.

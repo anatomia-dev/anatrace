@@ -5,6 +5,7 @@ import type { Report } from './report.js';
 import { resolvePack } from './registry.js';
 import { resolveSeverity, resolveOptions, applyIgnores } from './config.js';
 import { runCompliance } from './compliance.js';
+import { buildSessionMeta } from './meta/facts.js';
 
 const SCHEMA_VERSION = 2; // A5 — the one coherent v2 bump (sessionId + timeBounds?)
 
@@ -84,6 +85,10 @@ export function analyze(
   }
 
   const timeBounds = timeBoundsOf(session);
+  // Meta-facts (M1–M4) — additive optional per-session FACTS blocks (pure projection, no LLM,
+  // no verdict, no person-score). Omitted domains keep the R2 byte-identity intact;
+  // `ProvenanceCounts` (session.counts) is UNTOUCHED and `schemaVersion` STAYS 2.
+  const meta = buildSessionMeta(session);
   return {
     schemaVersion: SCHEMA_VERSION,
     session: {
@@ -93,6 +98,7 @@ export function analyze(
       counts: session.counts,
       observedVersions: session.observedVersions,
       ...(timeBounds ? { timeBounds } : {}),
+      ...(meta ?? {}),
     },
     findings: applyIgnores(findings, config),
     ...(compliance ? { compliance } : {}),
