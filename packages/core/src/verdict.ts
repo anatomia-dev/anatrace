@@ -32,6 +32,7 @@ import type {
 import type { ContentResolver } from './types.js';
 import { readPathsOf } from './read-paths.js';
 import { skillsInvokedInScope } from './skills.js';
+import { laneCapture, isGradeableCapture } from './meta/lane.js';
 import { commandStringOf } from './derive.js';
 import {
   classifyEditPath,
@@ -233,11 +234,90 @@ function evalReadPaths(
   return verdict(claim.id, 'unverifiable', 'absent-signal');
 }
 
+// ─── the observability + completeness gate (P2-GATE, D-B) ────────────────────────────────
+/**
+ * The set of distinct lanes (`AgentRef`) present on the session timeline (root ∪ each subagent).
+ * The FLAT union the lane-attribution rule keys on (REQ: root ∪ all descendant lanes).
+ */
+function lanesOf(session: NormalizedSession): AgentRef[] {
+  const out: AgentRef[] = [];
+  let hasRoot = false;
+  const subagentIds = new Set<string>();
+  for (const e of session.events) {
+    if (e.agent.kind === 'root') hasRoot = true;
+    else subagentIds.add(e.agent.subagentId);
+  }
+  if (hasRoot) out.push({ kind: 'root' });
+  for (const id of subagentIds) out.push({ kind: 'subagent', subagentId: id });
+  return out;
+}
+
+/**
+ * The AFFIRMATIVE observability + completeness gate for a `required`-skill ABSENCE (D-B, the
+ * honesty floor). Returns whether an absent `required` skill obligation may honestly flip to
+ * `violated`, plus the precise `unverifiable` reason when it may NOT. The burden of proof is on
+ * OBSERVABILITY, never the agent — the default is NOT observable (`unverifiable`).
+ *
+ * Two halves, BOTH must hold across the FLAT union of lanes:
+ *  (a) SIGNAL OBSERVABLE — at least one lane emits ≥1 STRUCTURED `Skill` event (`source:'tool'`).
+ *      Codex has no `Skill` primitive → `codex-blind`. A lane whose only skill signal is
+ *      free-text announce (`source:'announce-text'`) is NOT a structured emitter → `low-confidence`.
+ *  (b) ALL CONTRIBUTING LANES COMPLETE — every lane that emits structured `Skill` events resolves
+ *      to a GRADEABLE `capture` (`complete`/`compacted-in-place`). If ANY such lane is
+ *      `lane-start`/`truncated`/`unknown`, the skill could have run in dropped history →
+ *      `unverifiable` (NEVER `violated`). This is the compaction-dropped-skill guard.
+ *
+ * Only when BOTH hold may absence be a provable `violated`.
+ */
+function requiredSkillObservable(
+  session: NormalizedSession,
+): { observable: true } | { observable: false; reason: VerdictReason } {
+  // Codex has no structured Skill primitive at all.
+  if (codexBlindable(session)) return { observable: false, reason: 'codex-blind' };
+  const lanes = lanesOf(session);
+  // (a) the lanes that emit a STRUCTURED Skill event (source 'tool', the R2 default for absent).
+  const structuredLanes = lanes.filter((lane) =>
+    session.events.some(
+      (e) => e.type === 'skill' && (e.source ?? 'tool') === 'tool' && sameAgentRef(e.agent, lane),
+    ),
+  );
+  if (structuredLanes.length === 0) {
+    // No structured Skill emitter anywhere → not affirmatively observable. If there IS an
+    // announce-text skill signal it is merely low-confidence; otherwise the signal is absent.
+    const hasAnnounce = session.events.some(
+      (e) => e.type === 'skill' && e.source === 'announce-text',
+    );
+    return { observable: false, reason: hasAnnounce ? 'low-confidence' : 'absent-signal' };
+  }
+  // (b) EVERY lane in the FLAT union must be GRADEABLE. We check ALL lanes (not only the
+  // structured emitters): a `lane-start`/`truncated`/`unknown` lane lost pre-history in which the
+  // required skill COULD have run — even one ⇒ `unverifiable`, never `violated`. This is the
+  // compaction-dropped-skill / cardinal-sin guard (the required skill could live in dropped bytes).
+  for (const lane of lanes) {
+    if (!isGradeableCapture(laneCapture(session, lane))) {
+      // Reuse `content-unresolvable` for an incomplete-lane absence (the FROZEN enum has no
+      // dedicated reason; the Finding layer surfaces the precise `capture` state — P4).
+      return { observable: false, reason: 'content-unresolvable' };
+    }
+  }
+  return { observable: true };
+}
+
 // ─── skill-events ────────────────────────────────────────────────────────────────────────
 /**
- * Match the (lane-scoped) `skillsInvoked` with a structured `tool` source. Absence →
- * `unverifiable(absent-signal)`, NEVER `violated` (you can't prove the agent didn't announce).
- * An announce-text-only signal → `unverifiable(low-confidence)`.
+ * Match the (lane-scoped) `skillsInvoked` with a structured `tool` source.
+ *
+ * STRENGTH-AWARE (D-A / D-D, positive obligations):
+ *  - `optional` (default / absent): present → `satisfied`; absent → today's `unverifiable`,
+ *    NEVER `violated` (byte-identical to pre-positive-obligations behavior).
+ *  - `required`: present (FLAT union) → `satisfied`; absent + the observability+completeness gate
+ *    PASSES → `violated`/`predicate-not-matched`; absent + gate FAILS → `unverifiable` with the
+ *    precise reason. You can never prove a skip on a lane you couldn't reliably + completely see.
+ *  - `forbidden`: present → `violated`/`predicate-not-matched`; absent → `satisfied`.
+ *
+ * An announce-text-only signal is LOW-CONFIDENCE: it satisfies `optional`/`required` presence
+ * only as `unverifiable(low-confidence)` (never a structured pass), and is NOT enough to
+ * `violate` a `forbidden` (you can't prove a structured invocation from free text).
  */
 function evalSkillEvents(
   claim: MandateClaim,
@@ -247,17 +327,60 @@ function evalSkillEvents(
 ): ComplianceVerdict {
   const scope = scopeForClaim(claim);
   // Use the lane-scoped projection over the FULL session (window already pre-filtered events
-  // for windowed claims; skill membership is whole-lane for a whole-session claim).
+  // for windowed claims; skill membership is the FLAT union for a whole-session claim — REQ:
+  // root ∪ all descendant lanes, so a skill run only in a subagent counts as satisfied).
   const invoked = scope ? skillsInvokedInScope(session, scope) : skillsInvokedInScope(session);
   const needle = String(predicate.value ?? '');
   const match = invoked.find((s) => s.skill === needle || s.skill.includes(needle));
+  const strength = claim.strength ?? 'optional';
+
   if (match) {
     if (match.source === 'announce-text') {
+      // Free-text announce — low-confidence presence. Never a structured pass; never enough to
+      // `violate` a `forbidden` (can't prove a structured invocation happened from prose).
       return verdict(claim.id, 'unverifiable', 'low-confidence');
     }
+    // A STRUCTURED Skill invocation is present.
     const ev = scopedEvents.find((e) => e.type === 'skill' && e.skill === match.skill);
+    if (strength === 'forbidden') {
+      // The forbidden arm: a present structured invocation is the VIOLATION.
+      return verdict(claim.id, 'violated', 'predicate-not-matched', ev ? [pointer(ev)] : []);
+    }
+    // `required`/`optional` presence → satisfied.
     return verdict(claim.id, 'satisfied', 'predicate-matched', ev ? [pointer(ev)] : []);
   }
+
+  // ABSENT (no structured match in scope).
+  if (strength === 'forbidden') {
+    // The forbidden thing did not happen → satisfied (the negative obligation is met).
+    return verdict(claim.id, 'satisfied', 'predicate-matched');
+  }
+  if (strength === 'required') {
+    // V1 BOUNDARY: required is present/absent only — windowed/timing required is DEFERRED to v2.
+    // A windowed (non-whole-session) required claim must NEVER reach the whole-session gate: its
+    // presence is checked scope-locally but the gate observes the whole session, so a skill that
+    // ran OUTSIDE the window (e.g. in root) would be falsely reported `violated` (the cardinal
+    // sin). Guard it: any non-whole-session required claim resolves `unverifiable`, never
+    // `violated`. This closes the scope-vs-gate false-violated path. (`scope` is defined iff the
+    // claim is event-triggered-window, i.e. claim.scope.kind !== 'whole-session'.)
+    if (scope) {
+      return verdict(claim.id, 'unverifiable', 'low-confidence');
+    }
+    // The HONESTY FLOOR: absence flips to `violated` ONLY when the affirmative gate proves the
+    // signal is reliably observable AND every contributing lane is complete. Default → unverifiable.
+    const gate = requiredSkillObservable(session);
+    if (gate.observable) {
+      // Evidence = the expected locus (the first structured Skill emission point) so the Finding
+      // can point at where the required skill was expected; empty when no locus is resolvable.
+      const locus = session.events.find(
+        (e) => e.type === 'skill' && (e.source ?? 'tool') === 'tool',
+      );
+      return verdict(claim.id, 'violated', 'predicate-not-matched', locus ? [pointer(locus)] : []);
+    }
+    return verdict(claim.id, 'unverifiable', gate.reason);
+  }
+
+  // `optional` absence → today's behavior (NEVER violated).
   if (codexBlindable(session)) return verdict(claim.id, 'unverifiable', 'codex-blind');
   return verdict(claim.id, 'unverifiable', 'absent-signal');
 }

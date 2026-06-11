@@ -4,7 +4,7 @@
   "claims": [
     {
       "id": "ana-verify:skill:testing-standards",
-      "says": "ana-verify loads the testing-standards skill",
+      "says": "ana-verify must load the testing-standards skill",
       "kind": "skill-invoked",
       "scope": {
         "kind": "whole-session"
@@ -14,6 +14,7 @@
         "blob": "agents/ana-verify.md",
         "fidelity": "verbatim"
       },
+      "strength": "required",
       "predicate": {
         "target": "skill-events",
         "scope": "transcript",
@@ -23,7 +24,7 @@
     },
     {
       "id": "ana-verify:skill:coding-standards",
-      "says": "ana-verify loads the coding-standards skill",
+      "says": "ana-verify must load the coding-standards skill",
       "kind": "skill-invoked",
       "scope": {
         "kind": "whole-session"
@@ -33,6 +34,7 @@
         "blob": "agents/ana-verify.md",
         "fidelity": "verbatim"
       },
+      "strength": "required",
       "predicate": {
         "target": "skill-events",
         "scope": "transcript",
