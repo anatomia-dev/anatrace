@@ -183,6 +183,24 @@ export interface GenericPredicate extends PredicateBase {
 /** The boundary value: a deterministically-checkable predicate. */
 export type ClaimPredicate = MessageTextPredicate | GenericPredicate;
 
+/**
+ * The DECLARED obligation STRENGTH (D-A / D-D — positive obligations). NOT a `ClaimKind` (the
+ * 11-member enum stays frozen); a net-new OPTIONAL field on `ClaimBase`, default `optional`.
+ *
+ *  - `optional` (the DEFAULT, and the brand-safety hinge): a claim makes NO obligation about
+ *    presence OR absence — present → `satisfied`, ABSENT → today's `unverifiable`, NEVER
+ *    `violated`. An omitted `strength` is byte-IDENTICAL to pre-positive-obligations behavior.
+ *  - `required`: the obligation MUST occur. Absent from a RELIABLY-OBSERVABLE + COMPLETE lane →
+ *    `violated`; absent from any lane not affirmatively proven observable+complete →
+ *    `unverifiable` (the honesty floor — over-claiming is structurally impossible by default).
+ *  - `forbidden`: the obligation MUST NOT occur. PRESENT → `violated`; absent → `satisfied`.
+ *
+ * Strength is DECLARED by the adapter from known framework knowledge (D-D), NEVER reverse-
+ * engineered from prose. Only an adapter that explicitly declares `required`/`forbidden` can
+ * ever produce a `violated` on this axis.
+ */
+export type ClaimStrength = 'required' | 'optional' | 'forbidden';
+
 /** Fields every claim carries regardless of kind. */
 interface ClaimBase {
   /** Stable, human-meaningful — the join key to verdicts/proof-chain. */
@@ -196,6 +214,12 @@ interface ClaimBase {
    * `unverifiable`. EXCLUDED from the C5 coverage NUMERATOR (it stays in the denominator).
    */
   confidence?: 'low' | 'high';
+  /**
+   * DECLARED obligation strength (D-A / D-D). ABSENT ⇒ `optional` (byte-identical to today —
+   * the no-strength path never produces a `violated`). Only `required`/`forbidden` flip the
+   * absence/presence arms. See {@link ClaimStrength}.
+   */
+  strength?: ClaimStrength;
 }
 
 /**

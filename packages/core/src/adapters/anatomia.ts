@@ -1,6 +1,6 @@
 import type { NamedBlob } from '../adapter.js';
 import type { MandateAdapter } from '../types.js';
-import type { Mandate, MandateClaim, ClaimSource } from '../mandate.js';
+import type { Mandate, MandateClaim, ClaimSource, ClaimStrength } from '../mandate.js';
 import { decodeBlob } from './mandate-shared.js';
 
 /**
@@ -41,6 +41,48 @@ const VERIFY_FORBIDDEN_COMMANDS = ['git rebase', 'git push --force'] as const;
 /** True for the AnaVerify agent def (the only role under the read-only-codebase rule). */
 function isVerifyAgent(agent: string): boolean {
   return /(?:^|[-/])ana-?verify$/i.test(agent);
+}
+
+/**
+ * The three Anatomia PROCESS roles. `null` ⇒ an agent def we don't recognize as a known role
+ * (e.g. a custom subagent) → no DECLARED strength → the skill claim stays `optional` (the
+ * brand-safe default — never `violated` from an unrecognized role).
+ */
+type AnatomiaRole = 'plan' | 'build' | 'verify';
+
+/** Classify an agent-def name → its Anatomia role (or `null` for an unrecognized def). */
+function roleOf(agent: string): AnatomiaRole | null {
+  if (/(?:^|[-/])ana-?verify$/i.test(agent)) return 'verify';
+  if (/(?:^|[-/])ana-?build$/i.test(agent)) return 'build';
+  if (/(?:^|[-/])ana-?plan$/i.test(agent)) return 'plan';
+  return null;
+}
+
+/**
+ * The DECLARED per-(role × skill) strength map (D-D — strength is DECLARED, never parsed from
+ * prose). Authored from KNOWN Anatomia framework knowledge; this is the contract anatrace CHECKS.
+ *
+ * The exact declarations the REQ/runbook pin (done-state #5, the phantom guard):
+ *  - `coding-standards`:  optional/Build,  required/Plan & Verify.
+ *  - `git-workflow`:      required/Build,  forbidden/Verify   (the sole true `forbidden` in corpus;
+ *                         Verify is read-only on the codebase — `ana-verify.md:147`).
+ *  - `testing-standards`: required/Verify, optional/Plan & Build  (`ana-plan testing-standards`
+ *                         MUST be `optional` — the phantom-obligation guard; Build's "do not load
+ *                         by default, available on demand" → `optional`, NOT `forbidden`).
+ *
+ * A (role × skill) pair NOT in this map ⇒ `optional` (the default — absence can never `violate`).
+ * An unrecognized role (`roleOf` → null) ⇒ `optional` for ALL its skills.
+ */
+const SKILL_STRENGTH: Record<string, Partial<Record<AnatomiaRole, ClaimStrength>>> = {
+  'coding-standards': { plan: 'required', build: 'optional', verify: 'required' },
+  'git-workflow': { plan: 'optional', build: 'required', verify: 'forbidden' },
+  'testing-standards': { plan: 'optional', build: 'optional', verify: 'required' },
+};
+
+/** Resolve the DECLARED strength for a (role, skill) pair; default `optional` when undeclared. */
+function strengthFor(role: AnatomiaRole | null, skill: string): ClaimStrength {
+  if (!role) return 'optional';
+  return SKILL_STRENGTH[skill]?.[role] ?? 'optional';
 }
 
 /** Pull the `skills: [a, b]` inline list out of a `---`-fenced markdown frontmatter block. */
@@ -133,15 +175,28 @@ function extract(group: NamedBlob[]): Mandate | null {
 
     if (isAgentDef(b.name)) {
       const agent = agentName(text, b.name);
-      // skill-invoked — one per frontmatter `skills:` entry.
+      const role = roleOf(agent);
+      // skill-invoked — one per frontmatter `skills:` entry. The DECLARED strength (D-D) is
+      // resolved from the explicit per-(role × skill) map; absent declaration ⇒ `optional`
+      // (byte-identical to the pre-positive-obligations claim — the `strength` key is simply
+      // omitted, so an `optional` skill claim is a no-op on the absence/presence arms).
       for (const skill of frontmatterSkills(text)) {
         const src: ClaimSource = { kind: 'in-blob', blob: b.name, fidelity: 'verbatim' };
+        const strength = strengthFor(role, skill);
+        const saysVerb =
+          strength === 'required'
+            ? `must load the ${skill} skill`
+            : strength === 'forbidden'
+              ? `must NOT load the ${skill} skill`
+              : `loads the ${skill} skill`;
         claims.push({
           id: `${agent}:skill:${skill}`,
-          says: `${agent} loads the ${skill} skill`,
+          says: `${agent} ${saysVerb}`,
           kind: 'skill-invoked',
           scope: { kind: 'whole-session' },
           source: src,
+          // OMIT `strength` when `optional` (the default) → byte-identical to the prior claim.
+          ...(strength !== 'optional' ? { strength } : {}),
           predicate: {
             target: 'skill-events',
             scope: 'transcript',
