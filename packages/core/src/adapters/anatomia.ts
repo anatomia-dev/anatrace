@@ -23,6 +23,26 @@ import { decodeBlob } from './mandate-shared.js';
 /** "You never read the build report" (ana-verify) / "it never reads your report" (ana-build). */
 const INDEPENDENCE_RE = /\b(?:never reads?|do(?:es)? not read|don't read)\b[^.\n]*\breport\b/i;
 
+/**
+ * AnaVerify's "read-only on the codebase" rule (D-NONOBVIOUS). The agent def states AnaVerify
+ * "do[es] NOT fix code … do NOT merge" and is "read-only on the codebase. The only file you
+ * write is verify_report.md"; its sole sanctioned git is `ana artifact save` (commits/pushes the
+ * REPORT) + `ana pr create`. A `git rebase` or `git push --force*` REWRITES the code branch —
+ * forbidden. We recognize the rule by the verbatim "read-only on the codebase" imperative, then
+ * emit FORBIDDEN-command (`command-run` / `command-content` / `not_contains`) claims for each
+ * code-branch-mutating git op. Substring values chosen to be present verbatim in real commands
+ * (`git push --force` is a contiguous substring of `git push --force-with-lease …`).
+ */
+const VERIFY_READONLY_RE = /read-only on the codebase|do\s+NOT\s+(?:fix code|merge)/i;
+
+/** Code-branch-rewriting git ops AnaVerify must never run (verbatim substrings of real commands). */
+const VERIFY_FORBIDDEN_COMMANDS = ['git rebase', 'git push --force'] as const;
+
+/** True for the AnaVerify agent def (the only role under the read-only-codebase rule). */
+function isVerifyAgent(agent: string): boolean {
+  return /(?:^|[-/])ana-?verify$/i.test(agent);
+}
+
 /** Pull the `skills: [a, b]` inline list out of a `---`-fenced markdown frontmatter block. */
 function frontmatterSkills(text: string): string[] {
   const fm = /^---\n([\s\S]*?)\n---/m.exec(text);
@@ -146,6 +166,26 @@ function extract(group: NamedBlob[]): Mandate | null {
             value: 'build_report',
           },
         });
+      }
+      // verify read-only-codebase — FORBIDDEN code-branch-rewriting git commands (command-run).
+      // ONLY for the AnaVerify role, and ONLY when its def carries the read-only imperative.
+      if (isVerifyAgent(agent) && VERIFY_READONLY_RE.test(text)) {
+        for (const cmd of VERIFY_FORBIDDEN_COMMANDS) {
+          const src: ClaimSource = { kind: 'in-blob', blob: b.name, fidelity: 'verbatim' };
+          claims.push({
+            id: `${agent}:no-code-branch-mutation:${cmd.replace(/\s+/g, '-')}`,
+            says: `${agent} is read-only on the codebase and must not run \`${cmd}\` (rewrites the code branch)`,
+            kind: 'command-run',
+            scope: { kind: 'whole-session' },
+            source: src,
+            predicate: {
+              target: 'command-content',
+              scope: 'transcript',
+              matcher: 'not_contains',
+              value: cmd,
+            },
+          });
+        }
       }
     }
 

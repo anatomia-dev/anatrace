@@ -99,10 +99,19 @@ export type ClaimScope =
  * The closed predicate-target vocabulary (NEVER a selector DSL — the live `contract.yaml`
  * `target` is an open namespace of ~1,000+ distinct prefixes; we do NOT reproduce it).
  * `event-order` is RESERVED (unimplemented in C).
+ *
+ * `command-content` (D-NONOBVIOUS) is the narrowly-implemented completion of the long-reserved
+ * `command-run` claim KIND: it matches against the shell-command STRING of a `Bash`/`exec_command`
+ * tool event (`ToolEvent.input.command`), NOT the tool name. It exists so a role can declare a
+ * FORBIDDEN command class ("AnaVerify must not rebase or force-push the code branch") that
+ * `tool-names` (name-only) cannot express. Cross-harness real (both harnesses emit a shell tool);
+ * the negative-matcher (`not_contains`/`not_equals`) "forbidden command" direction is the one the
+ * Anatomia adapter uses, mirroring the read-paths/forbidden-edit blacklist evaluators.
  */
 export type PredicateTarget =
   | 'edit-paths'
   | 'tool-names'
+  | 'command-content'
   | 'read-paths'
   | 'skill-events'
   | 'message-text'

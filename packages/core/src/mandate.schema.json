@@ -118,6 +118,7 @@
           "enum": [
             "edit-paths",
             "tool-names",
+            "command-content",
             "read-paths",
             "skill-events",
             "message-text",
