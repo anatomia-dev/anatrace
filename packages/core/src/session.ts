@@ -61,6 +61,14 @@ export interface ToolResultEvent {
    * matching edit when `isError === true`. Optional/additive; not rendered, not counted.
    */
   toolUseId?: string;
+  /**
+   * @internal FI-2 (D-DERIVE) — the NAME of the originating tool, resolved by joining
+   * {@link toolUseId} → the `tool_use` block that emitted this result (Claude: `tool_use.id`;
+   * Codex: `function_call.call_id`). Lets `deriveCounts` gate `parseTestCounts` to RUNNER
+   * results (`COMMAND_TOOLS`) only, so a `Read`/`Grep` result echoing "N passed" no longer
+   * inflates `tests_executed` (the 7400-phantom vector). Optional/additive; not rendered.
+   */
+  forTool?: string;
 }
 /** Skill-signal provenance (B2). 'tool' = a structured Skill invocation (Claude, high-confidence); 'announce-text' = a portable announce-string match (Codex has no Skill primitive — low-confidence, OQ5). */
 export type SkillSource = 'tool' | 'announce-text';

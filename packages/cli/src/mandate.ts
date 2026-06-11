@@ -90,16 +90,30 @@ export interface MandateShowResult {
 }
 
 /**
- * Resolve the mandate source dir → adapter → extracted Mandate → rendered output. Returns
- * `{ok:false}` with a message when no adapter matches or extraction yields nothing.
+ * The resolved mandate + its disk-backed `ContentResolver` (for cross-artifact slug→bytes), or
+ * a failure with a user-facing message. The `resolver` is `fsContentResolver(dir)` so a verdict
+ * pass over `cross-artifact` sources can read them from the same source dir.
  */
-export function mandateShow(mandateDir: string): MandateShowResult {
-  if (!fs.existsSync(mandateDir)) {
-    return { ok: false, message: `anatrace: mandate source not found: ${mandateDir}` };
+export type ResolveMandateResult =
+  | { ok: true; mandate: Mandate; resolver: ContentResolver }
+  | { ok: false; message: string };
+
+/**
+ * Resolve a mandate source dir → detected adapter → extracted + validated `Mandate`, plus a
+ * disk-backed `ContentResolver` rooted at the dir. Framework-agnostic via `detectMandateAdapter`
+ * (no adapter is hardcoded). Shared by `mandate show` (renders it) and the root `--mandate` flag
+ * (verifies against it).
+ *
+ * @param dir - The framework mandate-source directory to resolve.
+ * @returns `{ok:true, mandate, resolver}` on success, else `{ok:false, message}`.
+ */
+export function resolveMandate(dir: string): ResolveMandateResult {
+  if (!fs.existsSync(dir)) {
+    return { ok: false, message: `anatrace: mandate source not found: ${dir}` };
   }
-  const group = readMandateDir(mandateDir);
+  const group = readMandateDir(dir);
   if (!group.length) {
-    return { ok: false, message: `anatrace: no mandate source files under ${mandateDir}` };
+    return { ok: false, message: `anatrace: no mandate source files under ${dir}` };
   }
   const adapter = detectMandateAdapter(group);
   if (!adapter) {
@@ -113,5 +127,18 @@ export function mandateShow(mandateDir: string): MandateShowResult {
   if (errs.length) {
     return { ok: false, message: `anatrace: invalid mandate:\n  ${errs.join('\n  ')}` };
   }
-  return { ok: true, message: renderMandate(mandate) };
+  return { ok: true, mandate, resolver: fsContentResolver(dir) };
+}
+
+/**
+ * `anatrace mandate show <dir>` — resolve then render. Behavior is byte-identical to before:
+ * it delegates resolution to {@link resolveMandate} and renders the extracted mandate.
+ *
+ * @param mandateDir - The framework mandate-source directory.
+ * @returns `{ok, message}` — the rendered mandate, or the failure message.
+ */
+export function mandateShow(mandateDir: string): MandateShowResult {
+  const res = resolveMandate(mandateDir);
+  if (!res.ok) return { ok: false, message: res.message };
+  return { ok: true, message: renderMandate(res.mandate) };
 }

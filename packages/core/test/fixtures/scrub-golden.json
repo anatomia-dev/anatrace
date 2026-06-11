@@ -1,0 +1,13 @@
+{
+  "scrubVersion": "1",
+  "vocabulary": ["∎path", "∎mail", "∎key", "∎hex"],
+  "pairs": [
+    { "in": "/Users/rsmith/Projects/anatrace/x.ts", "out": "∎path" },
+    { "in": "contact me at jane.doe@example.com please", "out": "contact me at ∎mail please" },
+    { "in": "token sk-ABCDEFGH12345678 leaked", "out": "token ∎key leaked" },
+    { "in": "gh token ghp_ABCDEFGH1234 here", "out": "gh token ∎key here" },
+    { "in": "aws AKIAABCDEFGH1234 key", "out": "aws ∎key key" },
+    { "in": "sha 0123456789abcdef0123456789abcdef01234567 done", "out": "sha ∎hex done" },
+    { "in": "nothing to scrub here", "out": "nothing to scrub here" }
+  ]
+}

@@ -78,9 +78,62 @@ export { readJsonlLines, parseJsonObject } from './adapter.js';
 export { canonicalSort } from './order.js';
 
 // The SkillEvent consumer (B2) — render/rule reader, never a ProvenanceCounts field.
-export { skillsInvoked, matchAnnouncedSkills } from './skills.js';
+// FI-15: `skillsInvokedInScope` is the lane-aware (concurrency-correct) variant for verdicts.
+export { skillsInvoked, skillsInvokedInScope, matchAnnouncedSkills } from './skills.js';
 export type { SkillInvocation } from './skills.js';
 export type { SkillSource } from './session.js';
+
+// The read-paths projection (D1 / verify-independence) — Read-tool file_path ONLY (Spike B).
+export { readPathsOf } from './read-paths.js';
+export type { ReadPath } from './read-paths.js';
+
+// The deterministic verdict layer (D1 — the brand). Zero LLM; closed reason enum; pointer evidence.
+export { verdictForClaim, verdictsForMandate, fileScopeVerdict } from './verdict.js';
+export type {
+  ComplianceVerdict,
+  VerdictStatus,
+  VerdictReason,
+  EvidencePointer,
+} from './verdict.js';
+
+// The file-scope SET-rule classifier + normalization (D1-FILESCOPE; golden-tested constant).
+export { classifyEditPath, normalizeEditPath } from './file-scope.js';
+export type { PathClass } from './file-scope.js';
+
+// The dossier (D2) — said-vs-did + bounded scrubbed evidence; standalone buildDossier (FI-5).
+export { buildDossier, buildZeroMandateWedge, DOSSIER_SCHEMA_VERSION, EVIDENCE_CAP } from './dossier.js';
+export type { Dossier, DossierClaim, DossierClaimSlice } from './dossier.js';
+
+// The canonical scrub (D2) — versioned, bit-identical to crack3d; covers Finding output.
+export { scrubText, scrubFinding, scrubDeep, SCRUB_VERSION } from './scrub.js';
+export type { ScrubbedExcerpt } from './scrub.js';
+
+// The verdict config layer (D-CONFIG) — ComplianceCheckId-keyed severities (NOT ClaimKind).
+export {
+  checkIdForClaim,
+  severityForVerdict,
+  complianceFindings,
+  unknownComplianceKeys,
+  complianceKey,
+  COMPLIANCE_CHECK_IDS,
+} from './compliance-config.js';
+export type { ComplianceCheckId } from './compliance-config.js';
+
+// SARIF projection + CI gate semantics (D-CONFIG) — the retention rail; violated-only on SARIF.
+export { toSarif, sarifLevel, ciExitCode } from './sarif.js';
+export type { SarifLog, SarifResult } from './sarif.js';
+
+// The opt-in compliance pack (D-CONFIG) — a SEPARATE pack, never unioned into recommended.
+export { COMPLIANCE_RULES, COMPLIANCE_PACK } from './rules/compliance.js';
+
+// The compliance orchestration (D3 glue) — verdicts + MASS Finding + dossier + hookRequests.
+export { runCompliance } from './compliance.js';
+export type { ComplianceResult } from './compliance.js';
+
+// The LLM-judge SEAM (D-HOOK) — DESIGNED, not wired. adjudicate is a SEPARATE entrypoint.
+// (JudgeInput/JudgeOutput are re-exported via types.js as the published seam names.)
+export { adjudicate, buildHookRequests } from './hook.js';
+export type { JudgeVerdict, HookRequest, JudgeBudget } from './hook.js';
 
 // The transcript-content resolver (B4) — injectable content source, no disk in core.
 export { transcriptContentResolver } from './content.js';

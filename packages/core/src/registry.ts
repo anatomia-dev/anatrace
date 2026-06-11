@@ -1,18 +1,21 @@
 import type { Config, Rule } from './types.js';
 import { FRICTION_RULES } from './rules/friction.js';
+import { COMPLIANCE_RULES } from './rules/compliance.js';
 
 /** In-core rule registry (REQ Item 10). No plugin loader — built-ins only. */
 const REGISTRY = new Map<string, Rule>();
 for (const rule of FRICTION_RULES) REGISTRY.set(rule.id, rule);
+for (const rule of COMPLIANCE_RULES) REGISTRY.set(rule.id, rule);
 
 /**
- * Named built-in packs (A1). `recommended` = friction ∪ later compliance packs; today
- * only friction exists, so both names resolve to the friction set. Phase D's compliance
- * pack extends this map — `resolvePack` then unions it into `recommended` additively.
+ * Named built-in packs (A1). `recommended` = friction ONLY (D-CONFIG / OQ-D10): `compliance`
+ * is a SEPARATE OPT-IN pack, NEVER unioned into `recommended`, so the no-config path stays
+ * byte-identical to R2. A user opts in with `extends:['recommended','compliance']`.
  */
 const PACKS: Record<string, () => Rule[]> = {
   recommended: () => [...FRICTION_RULES],
   friction: () => [...FRICTION_RULES],
+  compliance: () => [...COMPLIANCE_RULES],
 };
 
 /** Look up a registered rule by id. */

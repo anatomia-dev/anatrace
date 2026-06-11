@@ -1,6 +1,9 @@
 import type { ProvenanceCounts } from './provenance.js';
 import type { Finding } from './types.js';
 import type { Harness } from './session.js';
+import type { ComplianceVerdict } from './verdict.js';
+import type { Dossier } from './dossier.js';
+import type { HookRequest } from './hook.js';
 
 /**
  * The stable, versioned run-output envelope (REQ Item 10). Consumers script against it ⇒
@@ -12,12 +15,14 @@ import type { Harness } from './session.js';
  * consumers ignore the new keys; `ProvenanceCounts` is byte-identical). This is the ONE
  * coherent v2 bump for the A+B pass.
  *
- * RESERVED v2 keys — declared by COMMENT, NOT as fields (founder-decided): the payloads
- * `Report.dossier?`, `Report.compliance?`, and `Report.hookRequests?` land at Phases C/D
- * (their shape needs the schema C + verdict layer D that define them). Defining them now
- * would ship scaffolding; since the envelope is already v2, those keys appearing fresh at
- * D is fully additive (no re-pin). Obligation: do NOT reuse these three names for anything
- * else.
+ * v2 RESERVED keys — FILLED at Phase D (no schemaVersion re-bump; additive, founder-decided):
+ *  - `compliance?` — the per-claim deterministic `ComplianceVerdict[]` (the brand). Surveillance
+ *    guardrail: a verdict keys ONLY on `claimId`, NEVER an author/identity.
+ *  - `dossier?` — the said-vs-did artifact (bounded scrubbed evidence; the judge's input).
+ *  - `hookRequests?` — the `routed-to-llm` residue manifest (a team with no judge ships ZERO
+ *    LLM calls and still gets a complete, inspectable list).
+ * All three are OPTIONAL: a no-mandate run omits them, so R2 byte-identity holds. They ride
+ * the deterministic channel ONLY — `JudgeVerdict`/`rationale`/`model` NEVER appear here.
  */
 export interface Report {
   schemaVersion: number;
@@ -32,4 +37,10 @@ export interface Report {
     timeBounds?: { start: number; end: number };
   };
   findings: Finding[];
+  /** D — per-claim deterministic verdicts (no severity/rationale/model); present iff a mandate was supplied. */
+  compliance?: ComplianceVerdict[];
+  /** D — the said-vs-did dossier (bounded scrubbed evidence); present iff a mandate was supplied. */
+  dossier?: Dossier;
+  /** D — the `routed-to-llm` residue manifest (the judge's input); present iff a mandate was supplied. */
+  hookRequests?: HookRequest[];
 }

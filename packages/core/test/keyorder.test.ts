@@ -60,8 +60,8 @@ describe.each([
     expect(Object.keys(golden.tokens)).toEqual(EXPECTED_TOKEN_KEYS);
   });
 
-  it('carries derive_version "2" (B1 — human-message emission widened the duration window)', () => {
-    expect(golden.derive_version).toBe('2');
+  it('carries derive_version "3" (D-DERIVE / FI-2 runner-gate; frozen TOKEN tier unchanged)', () => {
+    expect(golden.derive_version).toBe('3');
   });
 
   it('has no cost_usd (cost is render-time only)', () => {

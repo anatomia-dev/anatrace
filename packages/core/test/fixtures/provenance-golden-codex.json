@@ -6,7 +6,7 @@
     "cache_read": 16000
   },
   "price_table_version": "2026-06-08",
-  "derive_version": "2",
+  "derive_version": "3",
   "duration_ms": 3000,
   "turns": 1,
   "tool_calls": 3,
