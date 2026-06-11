@@ -137,6 +137,16 @@ function parseCodex(group: NamedBlob[]): NormalizedSession | null {
       return;
     }
 
+    if (type === 'event_msg' && ptype === 'compacted') {
+      // S1 (M1/P1) — Codex's STRUCTURED compaction marker (the committed `codex-compacted`
+      // fixture). Detect on the structured `payload.type:"compacted"` event ONLY (the
+      // companion `session_meta.source==="compact"` is a session-level signal, not a per-line
+      // event). Codex carries no preTokens/trigger here → both omitted (honest `unknown`,
+      // never guessed). Symmetric with the Claude `compact_boundary` carrier.
+      events.push({ type: 'compact', ...meta });
+      return;
+    }
+
     if (type === 'event_msg' && ptype === 'turn_aborted') {
       if (rStr(payload, 'reason') === 'interrupted') {
         events.push({ type: 'interrupt', reason: 'interrupted', ...meta });

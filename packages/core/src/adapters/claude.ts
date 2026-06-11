@@ -217,6 +217,24 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
         }
       }
 
+      // S1 (M1/P1) — a STRUCTURED context-compaction boundary. Detect ONLY on the
+      // `type:"system" && subtype:"compact_boundary"` marker (never a prose/substring scan):
+      // the real corpus carries the string in 44 files but a structured record in only 6.
+      // `compactMetadata:{trigger, preTokens}` rides the line; both are optional/defensive.
+      // The carrier is lane-tagged via `meta` (root by nature — subagents don't compact the
+      // parent — but tagged so a reader can still assert it). Net-new union member; additive.
+      if (type === 'system' && rStr(line, 'subtype') === 'compact_boundary') {
+        const cm = rObj(line, 'compactMetadata');
+        const trigger = cm ? rStr(cm, 'trigger') : '';
+        const preTokens = cm ? rNum(cm, 'preTokens') : 0;
+        events.push({
+          type: 'compact',
+          ...(trigger ? { trigger } : {}),
+          ...(preTokens ? { preTokens } : {}),
+          ...meta,
+        });
+      }
+
       if (type === 'user' && message) {
         // C6b — the skill base-dir isMeta line: collect {sourceToolUseID → baseDir} for the
         // post-pass join; do NOT emit it as prose (it must never become a human MessageEvent).

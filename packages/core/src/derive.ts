@@ -1,4 +1,4 @@
-import type { NormalizedSession, UsageEvent } from './session.js';
+import type { NormalizedSession, UsageEvent, SessionEvent } from './session.js';
 import type { ProvenanceCounts, TokenCounts } from './provenance.js';
 import { PRICE_TABLE_VERSION } from './pricing.js';
 
@@ -16,8 +16,33 @@ import { PRICE_TABLE_VERSION } from './pricing.js';
  */
 export const DERIVE_VERSION = '3';
 
-/** Tool names that count as a shell command (REQ Item 3). `write_stdin` is excluded upstream. */
+/**
+ * Tool names that count as a shell command (REQ Item 3). `write_stdin` is excluded upstream.
+ *
+ * S3 (meta-facts): this set STAYS `{Bash, exec_command}` — the real command tools across both
+ * harnesses. Do NOT widen to `shell`/`local_shell`: those names are fabricated (absent from all
+ * source + every committed fixture; `codex.ts` names tools via the generic `function_call`
+ * handler). Add a tool name ONLY when a real transcript emits it.
+ */
 const COMMAND_TOOLS = new Set(['Bash', 'exec_command']);
+
+/**
+ * S3 (meta-facts) — the SHARED command-string extractor, moved here (the `COMMAND_TOOLS` home)
+ * and EXPORTED from its former module-private locus in `verdict.ts`. Pulls the shell-command
+ * STRING from a `Bash` (Claude) / `exec_command` (Codex) tool event's `input.command` — the
+ * ONLY transcript locus of a run command (`ToolEvent.name` is just `'Bash'`, so a `tool-names`
+ * check can never see WHICH command ran). Returns `''` for any other tool. The `command-content`
+ * verdict (`verdict.ts`) AND the M2 git-ops projection (`meta/git-ops.ts`) BOTH read it — one
+ * extractor, no re-implementation.
+ */
+export function commandStringOf(e: SessionEvent): string {
+  if (e.type !== 'tool') return '';
+  if (!COMMAND_TOOLS.has(e.name)) return '';
+  const input = e.input;
+  if (typeof input !== 'object' || input === null) return '';
+  const cmd = (input as Record<string, unknown>)['command'];
+  return typeof cmd === 'string' ? cmd : '';
+}
 
 function emptyTokens(): TokenCounts {
   return { input: 0, output: 0, cache_create: 0, cache_read: 0 };
