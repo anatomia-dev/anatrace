@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { claudeAdapter } from '../src/adapters/claude.js';
 import { analyze } from '../src/analyze.js';
 import { buildDossier, buildZeroMandateWedge, EVIDENCE_CAP } from '../src/dossier.js';
 import { verdictsForMandate } from '../src/verdict.js';
 import { scrubText, scrubFinding, SCRUB_VERSION } from '../src/scrub.js';
 import type { Mandate, CheckableClaim } from '../src/mandate.js';
+import type { NormalizedSession } from '../src/session.js';
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 const jsonl = (objs: unknown[]): string => objs.map((o) => JSON.stringify(o)).join('\n');
@@ -20,20 +24,25 @@ const readClaim: CheckableClaim = {
 };
 
 // ─── the scrub golden (shared cross-repo conformance — bit-identical to crack3d) ──────────
+// The in/out pairs are loaded from ONE committed canonical artifact (scrub-golden.json) so a
+// consumer (crack3d) can load the SAME file and run its own scrub against it. anatrace is the
+// canonical owner; do NOT inline these pairs.
+const here = path.dirname(fileURLToPath(import.meta.url));
+interface ScrubGolden {
+  scrubVersion: string;
+  vocabulary: string[];
+  pairs: Array<{ in: string; out: string }>;
+}
+const GOLDEN = JSON.parse(
+  fs.readFileSync(path.join(here, 'fixtures', 'scrub-golden.json'), 'utf8'),
+) as ScrubGolden;
+
 describe('D2 — scrub is versioned + matches the crack3d canonical vocabulary', () => {
-  const PAIRS: Array<[string, string]> = [
-    ['/Users/rsmith/Projects/anatrace/x.ts', '∎path'],
-    ['contact me at jane.doe@example.com please', 'contact me at ∎mail please'],
-    ['token sk-ABCDEFGH12345678 leaked', 'token ∎key leaked'],
-    ['gh token ghp_ABCDEFGH1234 here', 'gh token ∎key here'],
-    ['aws AKIAABCDEFGH1234 key', 'aws ∎key key'],
-    ['sha 0123456789abcdef0123456789abcdef01234567 done', 'sha ∎hex done'],
-    ['nothing to scrub here', 'nothing to scrub here'],
-  ];
-  it('SCRUB_VERSION is stamped', () => {
+  it('SCRUB_VERSION is stamped + matches the committed golden', () => {
     expect(SCRUB_VERSION).toBe('1');
+    expect(GOLDEN.scrubVersion).toBe(SCRUB_VERSION);
   });
-  for (const [input, expected] of PAIRS) {
+  for (const { in: input, out: expected } of GOLDEN.pairs) {
     it(`scrubs: ${input.slice(0, 30)}…`, () => {
       expect(scrubText(input)).toBe(expected);
     });
@@ -88,19 +97,88 @@ describe('D2 — buildDossier (said-vs-did; bounded scrubbed evidence; residue f
     expect(ex!.text.split('\n').length).toBeLessThanOrEqual(EVIDENCE_CAP);
   });
 
-  it('the zero-mandate human-constraint wedge works (no mandate file)', () => {
-    const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(jsonl([
-      assistant([{ type: 'tool_use', id: 'e0', name: 'Write', input: { file_path: 'secrets/keys.txt', content: 'x' } }], 'a1', '2026-06-08T00:00:01.000Z'),
-    ])) }])!;
-    const syntheticMandate: Mandate = { schemaVersion: 1, framework: 'human-constraint', claims: [{
-      id: 'human-constraint', says: 'do not touch secrets/keys.txt', kind: 'human-constraint', scope: { kind: 'whole-session' },
+  // The zero-mandate "don't touch X" wedge — the forbidden-edit blacklist evaluator. Uses an
+  // ARBITRARY forbidden path (config/production.env), not a memorized exemplar.
+  const FORBIDDEN = 'config/production.env';
+  function forbiddenMandate(value = FORBIDDEN, matcher: 'not_contains' | 'not_equals' = 'not_contains'): Mandate {
+    return { schemaVersion: 1, framework: 'human-constraint', claims: [{
+      id: 'human-constraint', says: `do not touch ${value}`, kind: 'human-constraint', scope: { kind: 'whole-session' },
       source: { kind: 'in-blob', blob: 'parent', fidelity: 'derived' },
-      predicate: { target: 'edit-paths', matcher: 'not_contains', scope: 'transcript', value: 'secrets/keys.txt' },
+      predicate: { target: 'edit-paths', matcher, scope: 'transcript', value },
     }] };
-    const verdicts = verdictsForMandate(syntheticMandate, s);
-    const d = buildZeroMandateWedge(s, 'secrets/keys.txt', verdicts);
-    // an edit of the forbidden path → violated
-    expect(d.violated.length + d.satisfied.length).toBe(1);
+  }
+  function claudeEdits(paths: string[]): ReturnType<typeof claudeAdapter.parse> {
+    const content = paths.map((p, i) => ({ type: 'tool_use', id: `e${i}`, name: 'Write', input: { file_path: p, content: 'x' } }));
+    return claudeAdapter.parse([{ name: 'parent', bytes: enc(jsonl([assistant(content, 'a1', '2026-06-08T00:00:01.000Z')])) }]);
+  }
+
+  it('wedge: the forbidden path WAS edited → violated(predicate-not-matched) with evidence', () => {
+    const s = claudeEdits([FORBIDDEN])!;
+    const verdicts = verdictsForMandate(forbiddenMandate(), s);
+    expect(verdicts[0]).toMatchObject({ status: 'violated', reason: 'predicate-not-matched' });
+    expect(verdicts[0]!.evidence.length).toBeGreaterThan(0);
+    const d = buildZeroMandateWedge(s, FORBIDDEN, verdicts);
+    expect(d.violated).toHaveLength(1);
+    expect(d.satisfied).toHaveLength(0);
+  });
+
+  it('wedge: the forbidden path was NOT touched → satisfied(predicate-matched)', () => {
+    const s = claudeEdits(['src/app.ts', 'README.md'])!;
+    const verdicts = verdictsForMandate(forbiddenMandate(), s);
+    expect(verdicts[0]).toMatchObject({ status: 'satisfied', reason: 'predicate-matched' });
+  });
+
+  it('wedge: a NON-COMPARABLE forbidden value (absolute, no repoRoot) → unverifiable(content-unresolvable)', () => {
+    const s = claudeEdits(['/abs/config/production.env'])!;
+    const verdicts = verdictsForMandate(forbiddenMandate('/abs/config/production.env'), s);
+    // forbidden value stays absolute after normalization → not comparable → must NOT silently pass
+    expect(verdicts[0]).toMatchObject({ status: 'unverifiable', reason: 'content-unresolvable' });
+  });
+
+  it('wedge: a worktree-prefixed edit of the forbidden path normalizes → violated (blacklist-side normalization)', () => {
+    const s = claudeEdits(['/abs/.ana/worktrees/some-slug/config/production.env'])!;
+    const verdicts = verdictsForMandate(forbiddenMandate(), s);
+    expect(verdicts[0]).toMatchObject({ status: 'violated', reason: 'predicate-not-matched' });
+    expect(verdicts[0]!.evidence.length).toBeGreaterThan(0);
+  });
+
+  it('wedge: not_equals forbidden value → exact match required (a child path does NOT violate)', () => {
+    const exact = claudeEdits([FORBIDDEN])!;
+    expect(verdictsForMandate(forbiddenMandate(FORBIDDEN, 'not_equals'), exact)[0]).toMatchObject({ status: 'violated' });
+    const child = claudeEdits(['config/production.env.bak'])!;
+    expect(verdictsForMandate(forbiddenMandate(FORBIDDEN, 'not_equals'), child)[0]).toMatchObject({ status: 'satisfied' });
+  });
+});
+
+// ─── cross-harness: edit-paths is NOT codex-blind (Codex emits EditEvents) ────────────────
+describe('D1 — forbidden-edit is cross-harness real (Codex patch_apply_end edits)', () => {
+  function codexSessionEditing(paths: string[]): NormalizedSession {
+    return {
+      schemaVersion: 2, harness: 'codex', sessionId: 's', observedVersions: [], subagents: [],
+      counts: {} as NormalizedSession['counts'],
+      events: paths.map((p, i) => ({
+        type: 'edit' as const, op: 'modify' as const, paths: [p],
+        agent: { kind: 'root' as const }, blobName: 'parent', lineIndex: i,
+      })),
+    };
+  }
+  const FORBIDDEN = 'config/production.env';
+  function mandate(): Mandate {
+    return { schemaVersion: 1, framework: 'human-constraint', claims: [{
+      id: 'human-constraint', says: `do not touch ${FORBIDDEN}`, kind: 'human-constraint', scope: { kind: 'whole-session' },
+      source: { kind: 'in-blob', blob: 'parent', fidelity: 'derived' },
+      predicate: { target: 'edit-paths', matcher: 'not_contains', scope: 'transcript', value: FORBIDDEN },
+    }] };
+  }
+  it('a Codex session editing the forbidden path → violated (NOT codex-blind)', () => {
+    const s = codexSessionEditing([FORBIDDEN]);
+    const v = verdictsForMandate(mandate(), s)[0]!;
+    expect(v).toMatchObject({ status: 'violated', reason: 'predicate-not-matched' });
+    expect(v.evidence.length).toBeGreaterThan(0);
+  });
+  it('a Codex session NOT touching the forbidden path → satisfied', () => {
+    const s = codexSessionEditing(['src/main.rs']);
+    expect(verdictsForMandate(mandate(), s)[0]).toMatchObject({ status: 'satisfied', reason: 'predicate-matched' });
   });
 });
 

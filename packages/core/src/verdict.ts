@@ -179,6 +179,23 @@ function codexBlindable(session: NormalizedSession): boolean {
 
 const NEGATIVE_MATCHERS = new Set(['not_contains', 'not_equals']);
 
+/**
+ * FI-17 — matcher totality. The string-comparable matchers `matchStr` mechanically implements
+ * (`contains`/`not_contains`/`equals`/`not_equals`/`exists`). `matches`/`gte`/`lte` are NOT
+ * mechanically comparable in the string arms — a caller must treat them as `unverifiable`
+ * (`content-unresolvable`), NEVER let `matchStr`'s `default:false` collapse into a silent
+ * `satisfied`/`violated`. Checked ONCE per claim at evaluator entry (not per element).
+ */
+function isComparableMatcher(matcher: string): boolean {
+  return (
+    matcher === 'contains' ||
+    matcher === 'not_contains' ||
+    matcher === 'equals' ||
+    matcher === 'not_equals' ||
+    matcher === 'exists'
+  );
+}
+
 // ─── read-paths (verify-independence) ────────────────────────────────────────────────────
 /**
  * Bind to the `Read` tool's `file_path` ONLY (Spike B: precision 1.0). Negative-matcher
@@ -191,6 +208,10 @@ function evalReadPaths(
   session: NormalizedSession,
 ): ComplianceVerdict {
   if (codexBlindable(session)) return verdict(claim.id, 'unverifiable', 'codex-blind');
+  // FI-17 — matcher totality: a matcher this arm can't mechanically compare → unverifiable.
+  if (!isComparableMatcher(predicate.matcher)) {
+    return verdict(claim.id, 'unverifiable', 'content-unresolvable');
+  }
   const needle = String(predicate.value ?? '');
   const reads = readPathsOf(session);
   const hits = reads.filter((r) => matchStr(r.path, predicate.matcher, needle));
@@ -250,13 +271,22 @@ function evalMessageText(
 ): ComplianceVerdict {
   const role = 'role' in predicate ? predicate.role : undefined;
   const needle = String(predicate.value ?? '');
-  const isNegative = NEGATIVE_MATCHERS.has(predicate.matcher);
+  const matcher = predicate.matcher;
+  // FI-17 — matcher totality: `matches`/`gte`/`lte` are not mechanically comparable on
+  // message-text (RegExp/numeric grep would re-open the literal-only bright line) → unverifiable.
+  if (matcher !== 'contains' && matcher !== 'not_contains' && matcher !== 'equals' && matcher !== 'not_equals') {
+    return verdict(claim.id, 'unverifiable', 'content-unresolvable');
+  }
+  const isNegative = NEGATIVE_MATCHERS.has(matcher);
+  const isExact = matcher === 'equals' || matcher === 'not_equals';
   let firstHit: SessionEvent | undefined;
   for (const e of scopedEvents) {
     if (e.type !== 'message') continue;
     if (role && e.role !== role) continue;
-    // LITERAL includes — never RegExp. This is the arm the brand bright line pins.
-    if ((e.text ?? '').includes(needle)) {
+    // LITERAL match — never RegExp. `equals`/`not_equals` → EXACT compare; `contains`/
+    // `not_contains` → the bright-line-pinned literal `.includes`.
+    const text = e.text ?? '';
+    if (isExact ? text === needle : text.includes(needle)) {
       firstHit = e;
       break;
     }
@@ -277,6 +307,10 @@ function evalToolNames(
   session: NormalizedSession,
   scopedEvents: SessionEvent[],
 ): ComplianceVerdict {
+  // FI-17 — matcher totality: a matcher this arm can't mechanically compare → unverifiable.
+  if (!isComparableMatcher(predicate.matcher)) {
+    return verdict(claim.id, 'unverifiable', 'content-unresolvable');
+  }
   const needle = String(predicate.value ?? '');
   const isNegative = NEGATIVE_MATCHERS.has(predicate.matcher);
   const hit = scopedEvents.find((e) => e.type === 'tool' && matchStr(e.name, predicate.matcher, needle));
@@ -300,6 +334,10 @@ function evalFileContent(
   resolver: AnyResolver | undefined,
 ): ComplianceVerdict {
   if (!resolver) return verdict(claim.id, 'unverifiable', 'content-unresolvable');
+  // FI-17 — matcher totality: a matcher this arm can't mechanically compare → unverifiable.
+  if (!isComparableMatcher(predicate.matcher)) {
+    return verdict(claim.id, 'unverifiable', 'content-unresolvable');
+  }
   const path = sourcePath(claim);
   if (!path) return verdict(claim.id, 'unverifiable', 'content-unresolvable');
   const bytes = resolver(path);
@@ -348,6 +386,14 @@ function evalEditPaths(
   sink: FileScopeFindingSink | undefined,
   repoRoot = '',
 ): ComplianceVerdict {
+  // BLACKLIST direction: a `not_contains`/`not_equals` edit-paths claim ("don't touch X") is a
+  // FORBIDDEN-set obligation, NOT a whitelist. It must be evaluated by the dedicated blacklist
+  // evaluator (modelled on evalReadPaths), NEVER routed through the whitelist fileScopeVerdict
+  // (whose absolute-path `continue` net silently PASSES in the blacklist direction — the
+  // inversion trap). matcher is read off the predicate (pre-checked non-null by the caller).
+  if (claim.predicate && NEGATIVE_MATCHERS.has(claim.predicate.matcher)) {
+    return evalForbiddenEdit(claim, claim.predicate, session, repoRoot);
+  }
   // Standalone (single-claim) path: the whitelist is this claim's own value. The SET UNION
   // over same-`source` claims is assembled by {@link verdictsForMandate}, which knows the
   // full mandate and routes file-scope claims directly to {@link fileScopeVerdict}.
@@ -358,6 +404,61 @@ function evalEditPaths(
   // relativization now actually runs when a real root is plumbed).
   if (ownValue) whitelist.add(normalizeEditPath(ownValue, repoRoot));
   return fileScopeVerdict(claim.id, sourceKey, whitelist, session, sink, sourceLabelOf(claim), repoRoot);
+}
+
+/**
+ * The BLACKLIST edit-paths evaluator (the forbidden-set / "don't touch X" direction). Modelled
+ * on {@link evalReadPaths} (the correct blacklist evaluator) but over EDIT events. Reaching here
+ * means the matcher is `not_contains`/`not_equals` (a NEGATIVE matcher). Honesty rules:
+ *  - the FORBIDDEN VALUE itself non-comparable (still absolute after normalization) →
+ *    `unverifiable`/`content-unresolvable` (NEVER the whitelist's silent-pass `continue` net);
+ *  - an individual edit path non-comparable (still absolute) while the forbidden value IS
+ *    comparable → excluded from the hit set (no false-accuse);
+ *  - any comparable edit path that matches the forbidden value (positive form: `not_contains`→
+ *    substring, `not_equals`→exact) → `violated`/`predicate-not-matched` with pointer evidence;
+ *  - none match → `satisfied`/`predicate-matched`.
+ * NOT routed through `fileScopeVerdict`: no test/collateral classifier skip, no MASS/NARROW count
+ * logic (whitelist-only) — ANY edit to the forbidden path is a violation regardless of class.
+ * NOT codex-blind: Codex emits EditEvents (`patch_apply_end`), so this is cross-harness real.
+ */
+function evalForbiddenEdit(
+  claim: MandateClaim,
+  predicate: ClaimPredicate,
+  session: NormalizedSession,
+  repoRoot = '',
+): ComplianceVerdict {
+  // FI-17 — only `not_contains`/`not_equals` are mechanically comparable here; any other
+  // negative-shaped matcher (none exist today, but reserve-broadly) → unverifiable.
+  if (predicate.matcher !== 'not_contains' && predicate.matcher !== 'not_equals') {
+    return verdict(claim.id, 'unverifiable', 'content-unresolvable');
+  }
+  const forbidden = normalizeEditPath(String(predicate.value ?? ''), repoRoot);
+  // The forbidden VALUE itself is non-comparable (still absolute → the root was unknown/wrong):
+  // we cannot honestly compare against repo-relative edit paths → unverifiable. Do NOT silently
+  // pass (the inversion trap that the whitelist's absolute-`continue` would spring here).
+  if (!forbidden || forbidden.startsWith('/')) {
+    return verdict(claim.id, 'unverifiable', 'content-unresolvable');
+  }
+  const isExact = predicate.matcher === 'not_equals';
+  const hits: SessionEvent[] = [];
+  for (const e of session.events) {
+    if (e.type !== 'edit') continue;
+    // Renames → check the destination (paths[1]); else the single edited path.
+    const raw = e.op === 'rename' ? e.paths[1] ?? e.paths[0] : e.paths[0];
+    if (!raw) continue;
+    const norm = normalizeEditPath(raw, repoRoot);
+    if (!norm) continue;
+    // A non-comparable edit path (still absolute) while the forbidden value IS comparable →
+    // exclude from the hit set (never false-accuse).
+    if (norm.startsWith('/')) continue;
+    // POSITIVE form of the obligation: not_contains → substring; not_equals → exact.
+    const matched = isExact ? norm === forbidden : norm.includes(forbidden);
+    if (matched) hits.push(e);
+  }
+  if (hits.length > 0) {
+    return verdict(claim.id, 'violated', 'predicate-not-matched', hits.map(pointer));
+  }
+  return verdict(claim.id, 'satisfied', 'predicate-matched');
 }
 
 /** Stable key grouping file-scope claims by their `source` (the whitelist boundary). */
@@ -531,6 +632,10 @@ export function verdictsForMandate(
   for (const c of mandate.claims) {
     if (c.kind !== 'file-scope' || !c.predicate) continue;
     if (c.predicate.target !== 'edit-paths') continue;
+    // A NEGATIVE-matcher (`not_contains`/`not_equals`) edit-paths claim is a BLACKLIST, NOT a
+    // whitelist member — adding it to the allow-list union would poison it (the forbidden path
+    // would become the only ALLOWED path). It is evaluated standalone by evalForbiddenEdit.
+    if (NEGATIVE_MATCHERS.has(c.predicate.matcher)) continue;
     const key = claimSourceKey(c);
     let set = unionBySource.get(key);
     if (!set) {
@@ -551,6 +656,7 @@ export function verdictsForMandate(
       claim.kind === 'file-scope' &&
       claim.predicate &&
       claim.predicate.target === 'edit-paths' &&
+      !NEGATIVE_MATCHERS.has(claim.predicate.matcher) && // blacklist → evalForbiddenEdit, not the union
       claim.confidence !== 'low' &&
       claim.predicate.scope !== 'runtime' &&
       claim.scope.kind === 'whole-session'

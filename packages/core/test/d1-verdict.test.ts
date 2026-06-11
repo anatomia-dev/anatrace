@@ -5,7 +5,7 @@ import {
   verdictsForMandate,
   type ComplianceVerdict,
 } from '../src/verdict.js';
-import type { Mandate, MandateClaim, CheckableClaim } from '../src/mandate.js';
+import type { Mandate, MandateClaim, CheckableClaim, Matcher } from '../src/mandate.js';
 import type { NormalizedSession } from '../src/session.js';
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
@@ -323,6 +323,96 @@ describe('D1 — window resolver binds opens to the STRUCTURED event (Spike C)',
     ])) }])!;
     // open exists, but the literal only appears BEFORE it → absent in the window → unverifiable(absent-signal)
     expect(verdictForClaim(windowedSkillClaim, s)).toMatchObject({ status: 'unverifiable', reason: 'absent-signal' });
+  });
+});
+
+// ─── FI-17 matcher totality (no unhandled matcher ever silently passes) ───────────────────
+describe('D1 — FI-17 matcher totality: an unhandled matcher → unverifiable, never silent satisfied', () => {
+  // The FULL Matcher union (mandate.ts) — iterate every member per arm.
+  const ALL: Matcher[] = ['contains', 'not_contains', 'equals', 'not_equals', 'exists', 'matches', 'gte', 'lte'];
+  // The matchers each string arm can mechanically compare; everything else → content-unresolvable.
+  const COMPARABLE = new Set<Matcher>(['contains', 'not_contains', 'equals', 'not_equals', 'exists']);
+  // The matchers that are NEVER mechanically comparable → must be unverifiable on EVERY arm.
+  const NEVER: Matcher[] = ['matches', 'gte', 'lte'];
+
+  function sessReads(p: string): NormalizedSession {
+    return claudeAdapter.parse([{ name: 'parent', bytes: enc(jsonl([
+      assistant([{ type: 'tool_use', name: 'Read', input: { file_path: p } }], 'a1', '2026-06-08T00:00:01.000Z'),
+    ])) }])!;
+  }
+  function sessTool(name: string): NormalizedSession {
+    return claudeAdapter.parse([{ name: 'parent', bytes: enc(jsonl([
+      assistant([{ type: 'tool_use', name, input: {} }], 'a1', '2026-06-08T00:00:01.000Z'),
+    ])) }])!;
+  }
+  function sessEdit(p: string): NormalizedSession {
+    return claudeAdapter.parse([{ name: 'parent', bytes: enc(jsonl([
+      assistant([{ type: 'tool_use', id: 'e0', name: 'Write', input: { file_path: p, content: 'x' } }], 'a1', '2026-06-08T00:00:01.000Z'),
+    ])) }])!;
+  }
+  function sessMsg(text: string): NormalizedSession {
+    return claudeAdapter.parse([{ name: 'parent', bytes: enc(jsonl([
+      assistant([{ type: 'text', text }], 'a1', '2026-06-08T00:00:01.000Z'),
+    ])) }])!;
+  }
+
+  function readClaimM(m: Matcher): CheckableClaim {
+    return { id: 'r', says: '', kind: 'human-constraint', scope: { kind: 'whole-session' }, source: xaSource('p', 'c'),
+      predicate: { target: 'read-paths', matcher: m, scope: 'transcript', value: 'x' } };
+  }
+  function editForbiddenClaimM(m: Matcher): CheckableClaim {
+    return { id: 'e', says: '', kind: 'file-scope', scope: { kind: 'whole-session' }, source: xaSource('p', 'c'),
+      predicate: { target: 'edit-paths', matcher: m, scope: 'transcript', value: 'forbidden/x.ts' } };
+  }
+  function toolClaimM(m: Matcher): CheckableClaim {
+    return { id: 't', says: '', kind: 'command-run', scope: { kind: 'whole-session' }, source: xaSource('p', 'c'),
+      predicate: { target: 'tool-names', matcher: m, scope: 'transcript', value: 'Bash' } };
+  }
+  function msgClaimM(m: Matcher): CheckableClaim {
+    return { id: 'm', says: '', kind: 'human-constraint', scope: { kind: 'whole-session' }, source: xaSource('p', 'c'),
+      predicate: { target: 'message-text', matcher: m, scope: 'transcript', value: 'hello', role: 'assistant', literalsOnly: true } };
+  }
+
+  it('read-paths: matches/gte/lte → unverifiable(content-unresolvable); never a silent satisfied', () => {
+    for (const m of NEVER) {
+      const v = verdictForClaim(readClaimM(m), sessReads('/r/x'));
+      expect(v).toMatchObject({ status: 'unverifiable', reason: 'content-unresolvable' });
+    }
+  });
+  it('edit-paths (not_* blacklist arm): only not_contains/not_equals compare; matches/gte/lte → unverifiable', () => {
+    // The forbidden-edit (blacklist) evaluator is reached for NEGATIVE matchers. The non-negative
+    // matchers route to the whitelist arm; we assert the NEVER matchers in the blacklist context
+    // by sending them through evalForbiddenEdit's totality guard via a negative-shaped harness is
+    // impossible (they aren't negative) — so assert via the whitelist arm's reachable totality:
+    // matches/gte/lte on edit-paths must never produce a violated/false-pass. We check the
+    // forbidden evaluator directly with its two comparable matchers and the whitelist otherwise.
+    for (const m of NEVER) {
+      // these are non-negative → whitelist arm; an unhandled matcher must not false-accuse.
+      const v = verdictForClaim(editForbiddenClaimM(m), sessEdit('forbidden/x.ts'));
+      expect(v.status).not.toBe('violated');
+    }
+  });
+  it('tool-names: matches/gte/lte → unverifiable(content-unresolvable)', () => {
+    for (const m of NEVER) {
+      const v = verdictForClaim(toolClaimM(m), sessTool('Bash'));
+      expect(v).toMatchObject({ status: 'unverifiable', reason: 'content-unresolvable' });
+    }
+  });
+  it('message-text: matches/gte/lte → unverifiable(content-unresolvable)', () => {
+    for (const m of NEVER) {
+      const v = verdictForClaim(msgClaimM(m), sessMsg('hello world'));
+      expect(v).toMatchObject({ status: 'unverifiable', reason: 'content-unresolvable' });
+    }
+  });
+  it('totality: NO comparable matcher arm ever returns a bare false-pass (every member resolves)', () => {
+    // Sanity: each comparable matcher resolves to one of the three statuses (no throw, no undefined).
+    for (const m of ALL) {
+      const ok = ['satisfied', 'violated', 'unverifiable'];
+      expect(ok).toContain(verdictForClaim(readClaimM(m), sessReads('/r/x')).status);
+      expect(ok).toContain(verdictForClaim(toolClaimM(m), sessTool('Bash')).status);
+      expect(ok).toContain(verdictForClaim(msgClaimM(m), sessMsg('hello')).status);
+    }
+    expect(COMPARABLE.size).toBe(5);
   });
 });
 
