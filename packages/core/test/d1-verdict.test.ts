@@ -379,17 +379,14 @@ describe('D1 — FI-17 matcher totality: an unhandled matcher → unverifiable, 
       expect(v).toMatchObject({ status: 'unverifiable', reason: 'content-unresolvable' });
     }
   });
-  it('edit-paths (not_* blacklist arm): only not_contains/not_equals compare; matches/gte/lte → unverifiable', () => {
-    // The forbidden-edit (blacklist) evaluator is reached for NEGATIVE matchers. The non-negative
-    // matchers route to the whitelist arm; we assert the NEVER matchers in the blacklist context
-    // by sending them through evalForbiddenEdit's totality guard via a negative-shaped harness is
-    // impossible (they aren't negative) — so assert via the whitelist arm's reachable totality:
-    // matches/gte/lte on edit-paths must never produce a violated/false-pass. We check the
-    // forbidden evaluator directly with its two comparable matchers and the whitelist otherwise.
+  it('edit-paths whitelist arm: matches/gte/lte → unverifiable(content-unresolvable) (only `contains` does SET membership)', () => {
+    // The positive edit-paths arm implements file-scope SET membership, which only `contains`
+    // expresses. A non-`contains` positive matcher is not mechanically applicable → honest
+    // `unverifiable`, consistent with the read-paths/tool-names/message-text arms — NEVER
+    // silently coerced to satisfied.
     for (const m of NEVER) {
-      // these are non-negative → whitelist arm; an unhandled matcher must not false-accuse.
       const v = verdictForClaim(editForbiddenClaimM(m), sessEdit('forbidden/x.ts'));
-      expect(v.status).not.toBe('violated');
+      expect(v).toMatchObject({ status: 'unverifiable', reason: 'content-unresolvable' });
     }
   });
   it('tool-names: matches/gte/lte → unverifiable(content-unresolvable)', () => {

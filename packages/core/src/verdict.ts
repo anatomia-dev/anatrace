@@ -394,6 +394,14 @@ function evalEditPaths(
   if (claim.predicate && NEGATIVE_MATCHERS.has(claim.predicate.matcher)) {
     return evalForbiddenEdit(claim, claim.predicate, session, repoRoot);
   }
+  // FI-17 totality (whitelist arm): file-scope SET membership is expressed ONLY by `contains`.
+  // Any other positive matcher on edit-paths is not mechanically applicable here → honest
+  // `unverifiable` (consistent with the read-paths/tool-names/file-content/forbidden-edit arms),
+  // NEVER a silent coercion to SET semantics. No reference adapter emits non-`contains` on
+  // edit-paths; the file-scope SET *batch* in verdictsForMandate is matcher-independent by design.
+  if (claim.predicate && claim.predicate.matcher !== 'contains') {
+    return verdict(claim.id, 'unverifiable', 'content-unresolvable');
+  }
   // Standalone (single-claim) path: the whitelist is this claim's own value. The SET UNION
   // over same-`source` claims is assembled by {@link verdictsForMandate}, which knows the
   // full mandate and routes file-scope claims directly to {@link fileScopeVerdict}.
