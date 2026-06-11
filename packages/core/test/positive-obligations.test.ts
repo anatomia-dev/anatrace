@@ -189,6 +189,40 @@ describe('PO #2 — the cardinal-sin guard: required absent on an UNOBSERVABLE/I
     expect(v).toMatchObject({ status: 'unverifiable', reason: 'absent-signal' });
     expect(v.status).not.toBe('violated');
   });
+
+  it('a WINDOWED (event-triggered-window) required claim whose skill ran OUTSIDE the window (in root) → unverifiable, NEVER violated', () => {
+    // V1 BOUNDARY regression: required is present/absent only — windowed/timing required is
+    // deferred to v2. PRESENCE is checked scope-locally (subagent `w`'s window) but the
+    // observability+completeness GATE observes the WHOLE session. The required skill
+    // `testing-standards` ran in ROOT (outside `w`'s window); `w` only ran `coding-standards`.
+    // Pre-fix the scope-local absence reached the whole-session gate and FALSELY `violated`.
+    // The guard must resolve this `unverifiable(low-confidence)` — never a false skip.
+    const s = claudeAdapter.parse([
+      { name: 'parent', bytes: enc(jsonl([
+        skillUse('testing-standards', 'p1', '2026-06-08T00:00:01.000Z'),
+      ])) },
+      { name: 'agent-w.jsonl', bytes: enc(jsonl([
+        skillUse('coding-standards', 's1', '2026-06-08T00:00:02.000Z'),
+      ])) },
+    ])!;
+    const windowedRequired: CheckableClaim = {
+      id: 'ana-verify:skill:testing-standards:windowed',
+      says: 'w must load testing-standards within its window',
+      kind: 'skill-invoked',
+      source: inBlob,
+      strength: 'required',
+      scope: {
+        kind: 'event-triggered-window',
+        opensOn: 'skill-invoked',
+        closesOn: 'rest-of-session',
+        agentScope: { kind: 'subagent', subagentId: 'w' },
+      },
+      predicate: { target: 'skill-events', scope: 'transcript', matcher: 'contains', value: 'testing-standards' },
+    };
+    const v = verdictForClaim(windowedRequired, s);
+    expect(v.status).not.toBe('violated');
+    expect(v).toMatchObject({ status: 'unverifiable', reason: 'low-confidence' });
+  });
 });
 
 // ─── #3 — present in a SUBAGENT lane only → satisfied (the flat-union false-violated guard) ──

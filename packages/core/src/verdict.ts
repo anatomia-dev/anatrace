@@ -356,6 +356,16 @@ function evalSkillEvents(
     return verdict(claim.id, 'satisfied', 'predicate-matched');
   }
   if (strength === 'required') {
+    // V1 BOUNDARY: required is present/absent only — windowed/timing required is DEFERRED to v2.
+    // A windowed (non-whole-session) required claim must NEVER reach the whole-session gate: its
+    // presence is checked scope-locally but the gate observes the whole session, so a skill that
+    // ran OUTSIDE the window (e.g. in root) would be falsely reported `violated` (the cardinal
+    // sin). Guard it: any non-whole-session required claim resolves `unverifiable`, never
+    // `violated`. This closes the scope-vs-gate false-violated path. (`scope` is defined iff the
+    // claim is event-triggered-window, i.e. claim.scope.kind !== 'whole-session'.)
+    if (scope) {
+      return verdict(claim.id, 'unverifiable', 'low-confidence');
+    }
     // The HONESTY FLOOR: absence flips to `violated` ONLY when the affirmative gate proves the
     // signal is reliably observable AND every contributing lane is complete. Default → unverifiable.
     const gate = requiredSkillObservable(session);
