@@ -139,7 +139,7 @@ export type { JudgeVerdict, HookRequest, JudgeBudget } from './hook.js';
 export { transcriptContentResolver } from './content.js';
 
 // The pure projection + cost (Item 4 / Item 7 / A4a).
-export { deriveCounts, DERIVE_VERSION } from './derive.js';
+export { deriveCounts, DERIVE_VERSION, commandStringOf } from './derive.js';
 export { computeCost, PRICES, PRICE_TABLE_VERSION } from './pricing.js';
 export type { PriceEntry, CostResult } from './pricing.js';
 
@@ -147,6 +147,23 @@ export type { PriceEntry, CostResult } from './pricing.js';
 export type { Report } from './report.js';
 export { analyze } from './analyze.js';
 export { parseSession } from './parse.js';
+
+// Meta-facts (M1–M4) — the additive per-session FACTS layer (no LLM, no verdict, no person-score).
+export { buildSessionMeta } from './meta/facts.js';
+export type {
+  SessionMetaFacts,
+  CompactionFacts,
+  CompactionBoundary,
+  ContextFacts,
+  EnvironmentFacts,
+  FlowFacts,
+  ScopeShapeFacts,
+} from './meta/facts.js';
+export { gitOpsOf } from './meta/git-ops.js';
+export type { GitOpsSummary, GitOpCounts } from './meta/git-ops.js';
+export { CONTEXT_LIMITS, CONTEXT_LIMITS_VERSION, contextLimitFor } from './meta/context-limits.js';
+export type { ContextLimitEntry } from './meta/context-limits.js';
+export { rootLaneEvents, splitByLane, isRootLane } from './meta/lane.js';
 export { getRule, defaultPack, allRules, resolvePack } from './registry.js';
 export { resolveSeverity, resolveOptions, applyIgnores } from './config.js';
 export { FRICTION_RULES, FRICTION_PACK, FRICTION_DEFAULT_SEVERITY } from './rules/friction.js';
