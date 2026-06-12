@@ -154,6 +154,130 @@ describe('D-CONFIG — the NON-anatomia mandate path is not anatomia-specific', 
   });
 });
 
+describe('Phase 0 — generic .anatrace.yaml policy path', () => {
+  it('auto-discovers .anatrace.yaml and emits a deterministic violation', () => {
+    const dir = tmpDir();
+    const session = path.join(dir, 'session.jsonl');
+    fs.writeFileSync(
+      session,
+      enc([
+        claudeAssistant(
+          [{ type: 'tool_use', id: 'c1', name: 'Bash', input: { command: 'rm -rf build' } }],
+          'a1',
+          '2026-06-12T00:00:01.000Z',
+        ),
+      ]),
+    );
+    fs.writeFileSync(
+      path.join(dir, '.anatrace.yaml'),
+      `version: 1
+rules:
+  - id: no-destructive
+    subject: this-agent
+    never_run: rm -rf
+`,
+    );
+    const r = run([session, '--json'], dir);
+    expect(r.code).toBe(0);
+    const report = JSON.parse(r.stdout) as {
+      compliance: Array<{ claimId: string; status: string; reason: string }>;
+    };
+    expect(report.compliance).toContainEqual(
+      expect.objectContaining({
+        claimId: 'no-destructive',
+        status: 'violated',
+        reason: 'predicate-not-matched',
+      }),
+    );
+  });
+
+  it('delegate-inclusive absence is unverifiable without a trusted capture manifest', () => {
+    const dir = tmpDir();
+    const session = claudeCleanSession(dir);
+    const policy = path.join(dir, 'policy.yaml');
+    fs.writeFileSync(
+      policy,
+      `version: 1
+rules:
+  - id: no-secret
+    subject: this-agent-and-all-delegates
+    never_read: secret.txt
+`,
+    );
+    const r = run([session, '--policy', policy, '--json'], dir);
+    const report = JSON.parse(r.stdout) as {
+      compliance: Array<{ status: string; reason: string }>;
+    };
+    expect(report.compliance[0]).toMatchObject({
+      status: 'unverifiable',
+      reason: 'delegate-coverage-incomplete',
+    });
+  });
+
+  it('the same absence is satisfied with a complete trusted launcher manifest', () => {
+    const dir = tmpDir();
+    const session = claudeCleanSession(dir);
+    const policy = path.join(dir, 'policy.yaml');
+    const manifest = path.join(dir, 'capture.json');
+    fs.writeFileSync(
+      policy,
+      `version: 1
+rules:
+  - id: no-secret
+    subject: this-agent-and-all-delegates
+    never_read: secret.txt
+`,
+    );
+    fs.writeFileSync(
+      manifest,
+      JSON.stringify({
+        source: 'trusted-launcher',
+        lanes: [
+          {
+            agent: { kind: 'root' },
+            captured: true,
+            delegateManifest: { status: 'complete', delegates: [] },
+          },
+        ],
+      }),
+    );
+    const r = run(
+      [session, '--policy', policy, '--capture-manifest', manifest, '--json'],
+      dir,
+    );
+    const report = JSON.parse(r.stdout) as {
+      compliance: Array<{ status: string; reason: string }>;
+    };
+    expect(report.compliance[0]).toMatchObject({
+      status: 'satisfied',
+      reason: 'predicate-matched',
+    });
+  });
+
+  it('binds role:<name> to the root lane only when --role is explicit', () => {
+    const dir = tmpDir();
+    const session = claudeCleanSession(dir);
+    const policy = path.join(dir, 'policy.yaml');
+    fs.writeFileSync(
+      policy,
+      `version: 1
+rules:
+  - id: no-secret
+    subject: role:build
+    never_read: secret.txt
+`,
+    );
+    const unbound = JSON.parse(run([session, '--policy', policy, '--json'], dir).stdout) as {
+      compliance: Array<{ reason: string }>;
+    };
+    expect(unbound.compliance[0]?.reason).toBe('subject-unresolvable');
+    const bound = JSON.parse(
+      run([session, '--policy', policy, '--role', 'build', '--json'], dir).stdout,
+    ) as { compliance: Array<{ status: string }> };
+    expect(bound.compliance[0]?.status).toBe('satisfied');
+  });
+});
+
 describe('R2 byte-identity — the NO-mandate run is unchanged (with vs without)', () => {
   it('stdout WITHOUT --mandate is byte-identical to the prior no-mandate behavior (3 fields omitted)', () => {
     const dir = tmpDir();

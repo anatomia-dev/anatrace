@@ -20,7 +20,6 @@ import type {
   MandateClaim,
   Mandate,
   ClaimPredicate,
-  AgentScope,
   WindowOpensOn,
 } from './mandate.js';
 import type {
@@ -30,6 +29,10 @@ import type {
   AgentRef,
 } from './session.js';
 import type { ContentResolver } from './types.js';
+import type {
+  CaptureCoverage,
+  MandateEvaluationContext,
+} from './capture-coverage.js';
 import { readPathsOf } from './read-paths.js';
 import { skillsInvokedInScope } from './skills.js';
 import { laneCapture, isGradeableCapture } from './meta/lane.js';
@@ -57,6 +60,8 @@ export type VerdictReason =
   | 'absent-signal' // a positive obligation whose signal never appears
   | 'content-unresolvable' // ContentResolver returned null / absent
   | 'codex-blind' // a Claude-only signal on a Codex session
+  | 'subject-unresolvable' // this-agent / role binding was absent or ambiguous
+  | 'delegate-coverage-incomplete' // no complete trusted delegate manifest / missing declared lane
   | 'window-unresolvable'; // an event-triggered window couldn't be bounded
 
 /** Evidence POINTS into the canonical timeline; it never COPIES bytes (scrub-safe, determinism-trivial). */
@@ -104,6 +109,140 @@ function verdict(
 /** The injected content source (B4) — disk impl at the CLI, or the in-core transcript impl. */
 type AnyResolver = ContentResolver;
 
+interface SubjectResolution {
+  events: SessionEvent[];
+  agents: AgentRef[];
+  delegateComplete: boolean;
+}
+
+function agentKey(agent: AgentRef): string {
+  return agent.kind === 'root' ? 'root' : `subagent:${agent.subagentId}`;
+}
+
+function uniqueAgents(agents: AgentRef[]): AgentRef[] {
+  const seen = new Set<string>();
+  return agents.filter((agent) => {
+    const key = agentKey(agent);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function expandDelegates(
+  anchors: AgentRef[],
+  coverage: CaptureCoverage | undefined,
+): { agents: AgentRef[]; complete: boolean } {
+  if (!coverage || coverage.source !== 'trusted-launcher') {
+    return { agents: uniqueAgents(anchors), complete: false };
+  }
+  const lanes = new Map<string, CaptureCoverage['lanes'][number]>();
+  let duplicateLane = false;
+  for (const lane of coverage.lanes) {
+    const key = agentKey(lane.agent);
+    if (lanes.has(key)) duplicateLane = true;
+    lanes.set(key, lane);
+  }
+  const out: AgentRef[] = [];
+  const resolved = new Set<string>();
+  const visiting = new Set<string>();
+  let complete = !duplicateLane;
+
+  const visit = (agent: AgentRef): void => {
+    const key = agentKey(agent);
+    if (visiting.has(key)) {
+      complete = false; // a launcher manifest must be an acyclic dispatch graph
+      return;
+    }
+    if (resolved.has(key)) return;
+    resolved.add(key);
+    out.push(agent);
+    const lane = lanes.get(key);
+    if (!lane || !lane.captured || lane.delegateManifest.status !== 'complete') {
+      complete = false;
+      return;
+    }
+    visiting.add(key);
+    for (const delegate of lane.delegateManifest.delegates) visit(delegate);
+    visiting.delete(key);
+  };
+
+  for (const anchor of anchors) visit(anchor);
+  return { agents: out, complete };
+}
+
+function resolveSubject(
+  claim: MandateClaim,
+  session: NormalizedSession,
+  context: MandateEvaluationContext | undefined,
+): SubjectResolution | null {
+  const subject = claim.subject;
+  if (!subject) {
+    return { events: session.events, agents: lanesOf(session), delegateComplete: true };
+  }
+
+  let anchors: AgentRef[];
+  let includeDelegates = false;
+  if (subject.kind === 'session') {
+    anchors = [{ kind: 'root' }];
+    includeDelegates = true;
+  } else if (subject.kind === 'agent') {
+    if (!context?.thisAgent) return null;
+    anchors = [context.thisAgent];
+    includeDelegates = subject.delegates === 'include';
+  } else {
+    const bound = context?.roleBindings?.[subject.role];
+    if (!bound?.length) return null;
+    anchors = bound;
+    includeDelegates = subject.delegates === 'include';
+  }
+
+  let expanded = includeDelegates
+    ? expandDelegates(anchors, context?.captureCoverage)
+    : { agents: uniqueAgents(anchors), complete: true };
+  // A root-inclusive subject always scans every observed lane, even without a manifest:
+  // observed violations remain provable. The manifest is needed only to prove that the scan
+  // was exhaustive. An observed lane omitted by a supposedly complete manifest invalidates
+  // completeness rather than disappearing from evaluation.
+  if (includeDelegates && anchors.some((agent) => agent.kind === 'root')) {
+    const observed = lanesOf(session);
+    const declared = new Set(expanded.agents.map(agentKey));
+    const hasUndeclaredObserved = observed.some((agent) => !declared.has(agentKey(agent)));
+    expanded = {
+      agents: uniqueAgents([...expanded.agents, ...observed]),
+      complete: expanded.complete && !hasUndeclaredObserved,
+    };
+  }
+  const keys = new Set(expanded.agents.map(agentKey));
+  return {
+    events: session.events.filter((event) => keys.has(agentKey(event.agent))),
+    agents: expanded.agents,
+    delegateComplete: expanded.complete,
+  };
+}
+
+function satisfactionProvesAbsence(claim: MandateClaim): boolean {
+  if (!claim.predicate) return false;
+  if (NEGATIVE_MATCHERS.has(claim.predicate.matcher)) return true;
+  if (claim.strength === 'forbidden') return true;
+  return (
+    claim.kind === 'file-scope' &&
+    (claim.predicate.target === 'edit-paths' || claim.predicate.target === 'read-paths')
+  );
+}
+
+function resultProvesAbsence(
+  claim: MandateClaim,
+  result: ComplianceVerdict,
+): boolean {
+  if (result.status === 'satisfied') return satisfactionProvesAbsence(claim);
+  return (
+    result.status === 'violated' &&
+    claim.strength === 'required' &&
+    result.reason === 'predicate-not-matched'
+  );
+}
+
 /**
  * Resolve ONE claim to ONE verdict — universal pre-checks IN ORDER, then dispatch by target.
  * Takes NO judge parameter. `findings` is an out-param: a MASS file-scope spread pushes a
@@ -115,6 +254,7 @@ export function verdictForClaim(
   resolver?: AnyResolver,
   sink?: FileScopeFindingSink,
   repoRoot = '',
+  context?: MandateEvaluationContext,
 ): ComplianceVerdict {
   // Pre-check 1 — low confidence (nested/overlapping window, the dispatch adapter ships it).
   if (claim.confidence === 'low') return verdict(claim.id, 'unverifiable', 'low-confidence');
@@ -126,10 +266,19 @@ export function verdictForClaim(
   // Pre-check 3 — runtime scope: the transcript can't see it (the honesty gate, ~90%+ of contract.yaml).
   if (predicate.scope === 'runtime') return verdict(claim.id, 'unverifiable', 'runtime-scoped');
 
-  // Pre-check 4 — windowed scope: resolve the window + agentScope first, then run the arm over it.
-  let scopedEvents = session.events;
+  // Pre-check 4 — resolve WHO independently from WHEN. Missing bindings are never inferred.
+  const subject = resolveSubject(claim, session, context);
+  if (!subject) return verdict(claim.id, 'unverifiable', 'subject-unresolvable');
+
+  // Pre-check 5 — resolve the temporal window on exactly one subject lane.
+  let scopedEvents = subject.events;
   if (claim.scope.kind === 'event-triggered-window') {
-    const win = resolveWindow(claim.scope.opensOn, claim.scope.agentScope, session);
+    if (subject.agents.length !== 1) {
+      return verdict(claim.id, 'unverifiable', 'window-unresolvable');
+    }
+    const agent = subject.agents[0];
+    if (!agent) return verdict(claim.id, 'unverifiable', 'window-unresolvable');
+    const win = resolveWindow(claim.scope.opensOn, agent, subject.events);
     if (win === null) return verdict(claim.id, 'unverifiable', 'window-unresolvable');
     scopedEvents = win;
   } else if (claim.scope.kind === 'cross-session') {
@@ -137,8 +286,25 @@ export function verdictForClaim(
     return verdict(claim.id, 'unverifiable', 'window-unresolvable');
   }
 
-  // Dispatch on the predicate target.
-  return dispatchTarget(claim, predicate, session, scopedEvents, resolver, sink, repoRoot);
+  // Dispatch over the subject+time intersection. Evaluators that project from `session`
+  // receive the filtered view, so no arm can accidentally escape the subject boundary.
+  const scopedSession = { ...session, events: scopedEvents };
+  const result = dispatchTarget(
+    claim,
+    predicate,
+    scopedSession,
+    scopedEvents,
+    resolver,
+    sink,
+    repoRoot,
+  );
+  if (
+    resultProvesAbsence(claim, result) &&
+    !subject.delegateComplete
+  ) {
+    return verdict(claim.id, 'unverifiable', 'delegate-coverage-incomplete');
+  }
+  return result;
 }
 
 function dispatchTarget(
@@ -166,6 +332,10 @@ function dispatchTarget(
       return evalToolNames(claim, predicate, session, scopedEvents);
     case 'command-content':
       return evalCommandContent(claim, predicate, session, scopedEvents);
+    case 'egress':
+      // Phase 1 implements the deterministic egress channel model. The Phase 0 loader may
+      // already declare the obligation, but it cannot silently pass before that model exists.
+      return verdict(claim.id, 'unverifiable', 'routed-to-llm');
     case 'file-content':
       return evalFileContent(claim, predicate, resolver);
     case 'event-order':
@@ -232,6 +402,40 @@ function evalReadPaths(
     return verdict(claim.id, 'satisfied', 'predicate-matched', hits.map((h) => ({ blobName: h.blobName, lineIndex: h.lineIndex, agent: h.agent, eventType: 'tool' as const })));
   }
   return verdict(claim.id, 'unverifiable', 'absent-signal');
+}
+
+/**
+ * `only_read` allowlist verdict over structured Read events. Policy claims use
+ * `kind:'file-scope' + target:'read-paths' + matcher:'contains'`; mandate-level batching
+ * supplies the union of all declared paths for the same source and subject.
+ */
+function readScopeVerdict(
+  claimId: string,
+  whitelist: Set<string>,
+  session: NormalizedSession,
+  repoRoot = '',
+): ComplianceVerdict {
+  const reads = readPathsOf(session);
+  if (reads.length === 0 && codexBlindable(session)) {
+    return verdict(claimId, 'unverifiable', 'codex-blind');
+  }
+  const outside: EvidencePointer[] = [];
+  for (const read of reads) {
+    const normalized = normalizeEditPath(read.path, repoRoot);
+    if (!normalized || normalized.startsWith('/')) {
+      return verdict(claimId, 'unverifiable', 'content-unresolvable');
+    }
+    if (whitelist.has(normalized)) continue;
+    outside.push({
+      blobName: read.blobName,
+      lineIndex: read.lineIndex,
+      agent: read.agent,
+      eventType: 'tool',
+    });
+  }
+  return outside.length > 0
+    ? verdict(claimId, 'violated', 'predicate-not-matched', outside)
+    : verdict(claimId, 'satisfied', 'predicate-matched');
 }
 
 // ─── the observability + completeness gate (P2-GATE, D-B) ────────────────────────────────
@@ -325,11 +529,8 @@ function evalSkillEvents(
   session: NormalizedSession,
   scopedEvents: SessionEvent[],
 ): ComplianceVerdict {
-  const scope = scopeForClaim(claim);
-  // Use the lane-scoped projection over the FULL session (window already pre-filtered events
-  // for windowed claims; skill membership is the FLAT union for a whole-session claim — REQ:
-  // root ∪ all descendant lanes, so a skill run only in a subagent counts as satisfied).
-  const invoked = scope ? skillsInvokedInScope(session, scope) : skillsInvokedInScope(session);
+  // `session.events` is already the subject+time intersection built by verdictForClaim.
+  const invoked = skillsInvokedInScope(session);
   const needle = String(predicate.value ?? '');
   const match = invoked.find((s) => s.skill === needle || s.skill.includes(needle));
   const strength = claim.strength ?? 'optional';
@@ -363,7 +564,7 @@ function evalSkillEvents(
     // sin). Guard it: any non-whole-session required claim resolves `unverifiable`, never
     // `violated`. This closes the scope-vs-gate false-violated path. (`scope` is defined iff the
     // claim is event-triggered-window, i.e. claim.scope.kind !== 'whole-session'.)
-    if (scope) {
+    if (claim.scope.kind !== 'whole-session') {
       return verdict(claim.id, 'unverifiable', 'low-confidence');
     }
     // The HONESTY FLOOR: absence flips to `violated` ONLY when the affirmative gate proves the
@@ -592,7 +793,16 @@ function evalEditPaths(
   // Normalize the contract path with the SAME root as the edits, so both sides match (step-1
   // relativization now actually runs when a real root is plumbed).
   if (ownValue) whitelist.add(normalizeEditPath(ownValue, repoRoot));
-  return fileScopeVerdict(claim.id, sourceKey, whitelist, session, sink, sourceLabelOf(claim), repoRoot);
+  return fileScopeVerdict(
+    claim.id,
+    sourceKey,
+    whitelist,
+    session,
+    sink,
+    sourceLabelOf(claim),
+    repoRoot,
+    claim.deviationHandling,
+  );
 }
 
 /**
@@ -657,6 +867,10 @@ function claimSourceKey(claim: MandateClaim): string {
   return `ib:${s.blob}`;
 }
 
+function claimBatchKey(claim: MandateClaim): string {
+  return `${claimSourceKey(claim)}:target:${claim.predicate?.target ?? 'none'}:deviation:${claim.deviationHandling ?? 'adaptive'}:subject:${JSON.stringify(claim.subject ?? null)}`;
+}
+
 /**
  * The shared file-scope verdict body, given a resolved whitelist UNION. Used by
  * `verdictsForMandate` (which batches same-source claims into one union). `repoRoot` is the
@@ -671,6 +885,7 @@ export function fileScopeVerdict(
   sink: FileScopeFindingSink | undefined,
   sourceLabel = '',
   repoRoot = '',
+  deviationHandling: 'adaptive' | 'strict' = 'adaptive',
 ): ComplianceVerdict {
   const root = repoRoot;
   const undeclaredSource: { path: string; ev: SessionEvent }[] = [];
@@ -700,7 +915,7 @@ export function fileScopeVerdict(
     // Empty out-of-union source set → vacuously "stays within X".
     return verdict(claimId, 'satisfied', 'predicate-matched');
   }
-  if (n >= 4) {
+  if (n >= 4 && deviationHandling === 'adaptive') {
     // MASS → a non-gating info Finding (DECISION B), NOT a verdict/unverifiable.
     sink?.push({
       ruleId: 'compliance/contract-under-specified',
@@ -722,29 +937,19 @@ export function fileScopeVerdict(
 }
 
 // ─── window resolver ─────────────────────────────────────────────────────────────────────
-/** The `AgentRef` a claim is scoped to (windowed → its `agentScope`; else whole-session/root). */
-function scopeForClaim(claim: MandateClaim): AgentRef | undefined {
-  if (claim.scope.kind === 'event-triggered-window') return agentScopeToRef(claim.scope.agentScope);
-  return undefined;
-}
-function agentScopeToRef(s: AgentScope): AgentRef {
-  return s.kind === 'root' ? { kind: 'root' } : { kind: 'subagent', subagentId: s.subagentId };
-}
-
 /**
  * Open the window on the STRUCTURED event matching `opensOn`, NEVER a text scan (Spike C: 7
- * `tool_result` announce-echoes vs 0 live announces). Filter-then-window by `agentScope`
+ * `tool_result` announce-echoes vs 0 live announces). Filter-then-window by the resolved subject
  * (concurrency-correct). Close on the next opening event on the same lane, else rest-of-session.
  * Returns the windowed slice, or `null` when the open is unresolvable on this harness/timeline.
  */
 function resolveWindow(
   opensOn: WindowOpensOn,
-  agentScope: AgentScope,
-  session: NormalizedSession,
+  agent: AgentRef,
+  events: SessionEvent[],
 ): SessionEvent[] | null {
-  const ref = agentScopeToRef(agentScope);
   // Filter FIRST to the scope's events (concurrency-correct), THEN bound.
-  const lane = session.events.filter((e) => sameAgentRef(e.agent, ref));
+  const lane = events.filter((e) => sameAgentRef(e.agent, agent));
   const opens = (e: SessionEvent): boolean => {
     switch (opensOn) {
       case 'skill-invoked':
@@ -809,6 +1014,7 @@ export function verdictsForMandate(
   resolver?: AnyResolver,
   findingsOut?: { ruleId: string; message: string; source: string; count: number }[],
   repoRoot = '',
+  context?: MandateEvaluationContext,
 ): ComplianceVerdict[] {
   const sink: FileScopeFindingSink | undefined = findingsOut
     ? { push: (f) => findingsOut.push(f) }
@@ -817,19 +1023,22 @@ export function verdictsForMandate(
   // Build the file-scope whitelist UNIONS, keyed by source, across all file-scope claims.
   // Normalize the contract paths with the SAME root as the edits so both sides match.
   const root = repoRoot;
-  const unionBySource = new Map<string, Set<string>>();
+  const editUnionBySource = new Map<string, Set<string>>();
+  const readUnionBySource = new Map<string, Set<string>>();
   for (const c of mandate.claims) {
     if (c.kind !== 'file-scope' || !c.predicate) continue;
-    if (c.predicate.target !== 'edit-paths') continue;
+    if (c.predicate.target !== 'edit-paths' && c.predicate.target !== 'read-paths') continue;
     // A NEGATIVE-matcher (`not_contains`/`not_equals`) edit-paths claim is a BLACKLIST, NOT a
     // whitelist member — adding it to the allow-list union would poison it (the forbidden path
     // would become the only ALLOWED path). It is evaluated standalone by evalForbiddenEdit.
     if (NEGATIVE_MATCHERS.has(c.predicate.matcher)) continue;
-    const key = claimSourceKey(c);
-    let set = unionBySource.get(key);
+    const key = claimBatchKey(c);
+    const unions =
+      c.predicate.target === 'edit-paths' ? editUnionBySource : readUnionBySource;
+    let set = unions.get(key);
     if (!set) {
       set = new Set<string>();
-      unionBySource.set(key, set);
+      unions.set(key, set);
     }
     const v = String(c.predicate.value ?? '');
     if (v) set.add(normalizeEditPath(v, root));
@@ -844,21 +1053,47 @@ export function verdictsForMandate(
     if (
       claim.kind === 'file-scope' &&
       claim.predicate &&
-      claim.predicate.target === 'edit-paths' &&
+      (claim.predicate.target === 'edit-paths' || claim.predicate.target === 'read-paths') &&
       !NEGATIVE_MATCHERS.has(claim.predicate.matcher) && // blacklist → evalForbiddenEdit, not the union
       claim.confidence !== 'low' &&
       claim.predicate.scope !== 'runtime' &&
       claim.scope.kind === 'whole-session'
     ) {
-      const key = claimSourceKey(claim);
-      const whitelist = unionBySource.get(key) ?? new Set<string>();
+      const key = claimBatchKey(claim);
+      const whitelist =
+        (claim.predicate.target === 'edit-paths'
+          ? editUnionBySource.get(key)
+          : readUnionBySource.get(key)) ?? new Set<string>();
       // Emit the MASS Finding only on the FIRST claim of a same-source batch.
       const localSink = fileScopeEmitted.has(key) ? undefined : sink;
       fileScopeEmitted.add(key);
-      out.push(fileScopeVerdict(claim.id, key, whitelist, session, localSink, sourceLabelOf(claim), root));
+      const subject = resolveSubject(claim, session, context);
+      if (!subject) {
+        out.push(verdict(claim.id, 'unverifiable', 'subject-unresolvable'));
+        continue;
+      }
+      const scopedSession = { ...session, events: subject.events };
+      const result =
+        claim.predicate.target === 'edit-paths'
+          ? fileScopeVerdict(
+              claim.id,
+              key,
+              whitelist,
+              scopedSession,
+              localSink,
+              sourceLabelOf(claim),
+              root,
+              claim.deviationHandling,
+            )
+          : readScopeVerdict(claim.id, whitelist, scopedSession, root);
+      out.push(
+        result.status === 'satisfied' && !subject.delegateComplete
+          ? verdict(claim.id, 'unverifiable', 'delegate-coverage-incomplete')
+          : result,
+      );
       continue;
     }
-    out.push(verdictForClaim(claim, session, resolver, sink, repoRoot));
+    out.push(verdictForClaim(claim, session, resolver, sink, repoRoot, context));
   }
   return out;
 }

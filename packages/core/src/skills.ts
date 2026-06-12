@@ -34,7 +34,7 @@ export interface SkillInvocation {
  * ⚠️ LANE-BLIND (FI-15): this counts skills FLAT over ALL events — root AND every concurrent
  * subagent timeline — so under fan-out it OVER-COUNTS a root obligation (a subagent's skill
  * is attributed to root). For a verdict that must not mis-attribute across timelines, use
- * {@link skillsInvokedInScope} with the claim's `agentScope`. The flat signature is kept
+ * {@link skillsInvokedInScope} with the claim's resolved single-lane subject. The flat signature is kept
  * UNCHANGED for existing render/coverage callers (additive).
  */
 export function skillsInvoked(session: NormalizedSession): SkillInvocation[] {
@@ -48,7 +48,7 @@ function sameAgent(a: AgentRef, b: AgentRef): boolean {
 }
 
 /**
- * Lane-scoped skill projection (FI-15) — distinct skills invoked ON A SINGLE `agentScope`
+ * Lane-scoped skill projection (FI-15) — distinct skills invoked ON A SINGLE resolved subject lane
  * timeline (concurrency-correct). D1's `skill-events` evaluator + the window resolver use
  * this so a subagent's skill is never attributed to root (the over-count {@link skillsInvoked}
  * documents). When `scope` is omitted, falls back to the flat (lane-blind) projection.

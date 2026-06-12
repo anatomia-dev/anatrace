@@ -55,21 +55,32 @@
         }
       ]
     },
-    "AgentScope": {
+    "ClaimSubject": {
       "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "selector", "delegates"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "agent" },
+            "selector": { "const": "this" },
+            "delegates": { "enum": ["exclude", "include"] }
+          }
+        },
         {
           "type": "object",
           "required": ["kind"],
           "additionalProperties": false,
-          "properties": { "kind": { "const": "root" } }
+          "properties": { "kind": { "const": "session" } }
         },
         {
           "type": "object",
-          "required": ["kind", "subagentId"],
+          "required": ["kind", "role", "delegates"],
           "additionalProperties": false,
           "properties": {
-            "kind": { "const": "subagent" },
-            "subagentId": { "type": "string" }
+            "kind": { "const": "role" },
+            "role": { "type": "string", "minLength": 1 },
+            "delegates": { "enum": ["exclude", "include"] }
           }
         }
       ]
@@ -84,7 +95,7 @@
         },
         {
           "type": "object",
-          "required": ["kind", "opensOn", "closesOn", "agentScope"],
+          "required": ["kind", "opensOn", "closesOn"],
           "additionalProperties": false,
           "properties": {
             "kind": { "const": "event-triggered-window" },
@@ -98,8 +109,7 @@
                 "scope-depth"
               ]
             },
-            "marker": { "type": "string" },
-            "agentScope": { "$ref": "#/definitions/AgentScope" }
+            "marker": { "type": "string" }
           }
         },
         {
@@ -119,6 +129,7 @@
             "edit-paths",
             "tool-names",
             "command-content",
+            "egress",
             "read-paths",
             "skill-events",
             "message-text",
@@ -163,9 +174,12 @@
         "id": { "type": "string", "minLength": 1 },
         "says": { "type": "string" },
         "kind": { "$ref": "#/definitions/ClaimKind" },
+        "subject": { "$ref": "#/definitions/ClaimSubject" },
         "scope": { "$ref": "#/definitions/ClaimScope" },
         "source": { "$ref": "#/definitions/ClaimSource" },
         "confidence": { "enum": ["low", "high"] },
+        "strength": { "enum": ["required", "optional", "forbidden"] },
+        "deviationHandling": { "enum": ["adaptive", "strict"] },
         "predicate": { "$ref": "#/definitions/ClaimPredicate" }
       },
       "allOf": [

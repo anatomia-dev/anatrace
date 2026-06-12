@@ -7,6 +7,7 @@
 import type { Mandate, MandateClaim } from './mandate.js';
 import type { NormalizedSession } from './session.js';
 import type { ContentResolver, Finding, Severity, Config } from './types.js';
+import type { MandateEvaluationContext } from './capture-coverage.js';
 import { verdictsForMandate, type ComplianceVerdict } from './verdict.js';
 import {
   checkIdForClaim,
@@ -44,9 +45,17 @@ export function runCompliance(
   resolver?: ContentResolver,
   config?: Config,
   repoRoot?: string,
+  context?: MandateEvaluationContext,
 ): ComplianceResult {
   const raw: RawFinding[] = [];
-  const verdicts = verdictsForMandate(mandate, session, resolver, raw, repoRoot ?? '');
+  const verdicts = verdictsForMandate(
+    mandate,
+    session,
+    resolver,
+    raw,
+    repoRoot ?? '',
+    context,
+  );
 
   // MASS `contract-under-specified` → a non-gating `info` Finding (DECISION B). Its severity is
   // the config-resolved `compliance/contract-under-specified` setting (default `info`).

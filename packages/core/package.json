@@ -1,8 +1,15 @@
 {
   "name": "anatrace-core",
   "version": "0.0.0",
+  "description": "Pure cross-harness session parsing and deterministic policy verification for AI agents",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anatomia-dev/anatrace.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/anatomia-dev/anatrace#readme",
   "sideEffects": false,
   "files": ["dist"],
   "exports": {
@@ -13,7 +20,9 @@
     "./package.json": "./package.json"
   },
   "publishConfig": { "access": "public", "provenance": true },
-  "dependencies": {},
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.negative.json",

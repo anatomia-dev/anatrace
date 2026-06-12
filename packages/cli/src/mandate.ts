@@ -5,6 +5,7 @@ import {
   validateMandate,
   coverageStat,
   renderCoverageLine,
+  loadPolicyYaml,
 } from 'anatrace-core';
 import type { NamedBlob, Mandate, MandateClaim, ContentResolver } from 'anatrace-core';
 
@@ -97,6 +98,33 @@ export interface MandateShowResult {
 export type ResolveMandateResult =
   | { ok: true; mandate: Mandate; resolver: ContentResolver }
   | { ok: false; message: string };
+
+/**
+ * Resolve a generic `.anatrace.yaml` file without any framework adapter.
+ *
+ * @param file - Policy file path.
+ * @returns The compiled Mandate and a resolver rooted beside the policy.
+ */
+export function resolvePolicy(file: string): ResolveMandateResult {
+  let text: string;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return { ok: false, message: `anatrace: policy not found: ${file}` };
+  }
+  const loaded = loadPolicyYaml(text, path.basename(file));
+  if (!loaded.ok) {
+    return {
+      ok: false,
+      message: `anatrace: invalid policy:\n  ${loaded.errors.join('\n  ')}`,
+    };
+  }
+  return {
+    ok: true,
+    mandate: loaded.mandate,
+    resolver: fsContentResolver(path.dirname(file)),
+  };
+}
 
 /**
  * Resolve a mandate source dir → detected adapter → extracted + validated `Mandate`, plus a

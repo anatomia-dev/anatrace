@@ -1,6 +1,6 @@
 import type { NamedBlob } from '../adapter.js';
 import type { MandateAdapter } from '../types.js';
-import type { Mandate, MandateClaim, ClaimSource, ClaimScope } from '../mandate.js';
+import type { Mandate, MandateClaim, ClaimSource, ClaimScope, ClaimSubject } from '../mandate.js';
 import { decodeBlob } from './mandate-shared.js';
 
 /**
@@ -17,9 +17,9 @@ import { decodeBlob } from './mandate-shared.js';
  *    isn't emitted; at D, absence resolves `unverifiable`, never a false violation on the GTM
  *    cohort's own skills).
  *  - `scope` is adapter-ASSIGNED per skill kind, not source-extracted (no frontmatter `scope`).
- *  - `agentScope` is MANDATORY on every `event-triggered-window` claim (default = the opening
- *    event's root `AgentRef`) — concurrency is the GTM NORM (depth ≥3 fan-out + parallel
- *    dispatch), and a flat window without `agentScope` mis-attributes across subagent timelines.
+ *  - identity is carried only by `claim.subject`, never by the temporal window. Windowed claims
+ *    use `{kind:'agent', selector:'this', delegates:'exclude'}` so a flat window cannot
+ *    mis-attribute across concurrent subagent timelines.
  *    Overlapping/nested windows → `confidence:'low'` → `unverifiable` (flat windows in C; the
  *    `scope-depth` nesting model is RESERVED, not implemented).
  *
@@ -45,14 +45,18 @@ function isSkillFile(name: string): boolean {
   return /(?:^|\/)SKILL\.md$/i.test(name);
 }
 
-/** A windowed claim's scope, with the MANDATORY root `agentScope` (concurrency axis). */
+/** A windowed claim's temporal scope. Identity lives separately in {@link windowSubject}. */
 function windowScope(): ClaimScope {
   return {
     kind: 'event-triggered-window',
     opensOn: 'skill-announced',
     closesOn: 'next-skill-announce',
-    agentScope: { kind: 'root' },
   };
+}
+
+/** A window resolves on the explicitly bound current lane only. */
+function windowSubject(): ClaimSubject {
+  return { kind: 'agent', selector: 'this', delegates: 'exclude' };
 }
 
 function detect(group: NamedBlob[]): boolean {
@@ -82,6 +86,7 @@ function extract(group: NamedBlob[]): Mandate | null {
         id: `${skill}:announced`,
         says: `announces "${announce}" at start`,
         kind: 'skill-announced',
+        subject: windowSubject(),
         scope: windowScope(),
         source: src,
         // message-text predicate — literalsOnly pins it to a literal match (no prose-grep).
@@ -96,14 +101,15 @@ function extract(group: NamedBlob[]): Mandate | null {
       });
     }
 
-    // dispatch — the fan-out/parallel-dispatch model. A windowed claim with MANDATORY
-    // agentScope; flat in C (nested fan-out degrades to unverifiable via confidence:'low').
+    // dispatch — the fan-out/parallel-dispatch model. Identity is on `subject`; the temporal
+    // window remains flat (nested fan-out degrades to unverifiable via confidence:'low').
     if (DISPATCH_RE.test(text)) {
       const src: ClaimSource = { kind: 'in-blob', blob: b.name, fidelity: 'derived' };
       claims.push({
         id: `${skill}:dispatch`,
         says: `${skill} dispatches subagents`,
         kind: 'dispatch',
+        subject: windowSubject(),
         scope: windowScope(),
         source: src,
         confidence: 'low', // overlapping/nested windows are the GTM norm → unverifiable

@@ -1,6 +1,7 @@
 import type { NormalizedSession } from './session.js';
 import type { Capabilities, Config, Finding, EvalContext } from './types.js';
 import type { Mandate } from './mandate.js';
+import type { MandateEvaluationContext } from './capture-coverage.js';
 import type { Report } from './report.js';
 import { resolvePack } from './registry.js';
 import { resolveSeverity, resolveOptions, applyIgnores } from './config.js';
@@ -50,6 +51,7 @@ function timeBoundsOf(session: NormalizedSession): { start: number; end: number 
  *   relativize ABSOLUTE non-worktree source edits so file-scope normalization can compare them
  *   against the repo-relative contract whitelist. Additive/optional; absent ⇒ prior behavior
  *   (worktree-strip only) + the still-absolute safety net (never false-accuse).
+ * @param mandateContext - Trusted subject bindings and launcher-supplied capture coverage.
  * @returns The `Report` envelope
  */
 export function analyze(
@@ -58,6 +60,7 @@ export function analyze(
   capabilities?: Capabilities,
   mandate?: Mandate,
   repoRoot?: string,
+  mandateContext?: MandateEvaluationContext,
 ): Report {
   const ctx: EvalContext = { session, ...(capabilities ? { capabilities } : {}) };
   const findings: Finding[] = [];
@@ -77,7 +80,14 @@ export function analyze(
   let dossier: Report['dossier'];
   let hookRequests: Report['hookRequests'];
   if (mandate) {
-    const result = runCompliance(mandate, session, capabilities?.contentResolver, config, repoRoot);
+    const result = runCompliance(
+      mandate,
+      session,
+      capabilities?.contentResolver,
+      config,
+      repoRoot,
+      mandateContext,
+    );
     compliance = result.verdicts;
     dossier = result.dossier;
     hookRequests = result.hookRequests;

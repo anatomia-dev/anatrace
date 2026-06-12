@@ -25,6 +25,8 @@ within it. Across both harnesses, entirely on your machine.
 - **Friction** — deterministic findings about where a session struggled.
 - **Mandate inspection** — `anatrace mandate show <dir>` extracts the declared
   mandate (claims + predicate coverage) from a framework's source files.
+- **Generic policy loading** — a repository-owned `.anatrace.yaml` compiles
+  directly to the Mandate IR without a framework adapter.
 - **Compliance verdicts** — given a mandate, anatrace emits per-claim
   deterministic verdicts (`satisfied` / `violated` / `unverifiable`) with a
   closed, machine-readable reason. Absent or non-comparable signal is always
@@ -32,6 +34,57 @@ within it. Across both harnesses, entirely on your machine.
   none. Gate CI with `--ci` / `--fail-on`, or emit `--format sarif` for code
   scanning. *(File-scope adherence is the headline check; its accuracy is
   exemplar-validated today — a measured precision/recall is in progress.)*
+
+## Generic policy
+
+Place `.anatrace.yaml` in the working directory, or pass
+`--policy path/to/policy.yaml`:
+
+```yaml
+version: 1
+rules:
+  - id: build-files
+    subject: role:build
+    delegates: include
+    only_edit:
+      - src/output.ts
+
+  - id: no-secrets
+    subject: this-agent-and-all-delegates
+    never_read:
+      - secrets/customer.csv
+
+  - id: no-destructive-command
+    subject: this-agent
+    never_run:
+      - rm -rf
+```
+
+```sh
+anatrace session.jsonl --role build --json
+```
+
+Policy subjects are explicit: `this-agent`,
+`this-agent-and-all-delegates`, `any-agent-in-session`, or `role:<name>`.
+`role:<name>` uses `delegates: include|exclude` and must be bound by the
+launcher or `--role`.
+
+Delegate-inclusive negatives require a trusted launcher capture manifest:
+
+```sh
+anatrace session.jsonl \
+  --policy .anatrace.yaml \
+  --capture-manifest capture.json \
+  --json
+```
+
+Without a complete recursive manifest, absence is
+`unverifiable: delegate-coverage-incomplete`; observed violations still carry
+evidence. See [Subject Axis](./docs/SUBJECT-AXIS.md).
+
+Phase 0 accepts `never_egress` so policies do not need a later schema rewrite,
+but returns `unverifiable` until Phase 1 lands channel-complete egress
+detection. Path entries are exact normalized paths in this phase.
 
 ## Packages
 
