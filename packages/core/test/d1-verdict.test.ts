@@ -137,13 +137,13 @@ describe('D1 — read-paths binds to Read.file_path; negative-matcher mapping pi
     expect(v).toMatchObject({ status: 'violated', reason: 'predicate-not-matched' });
     expect(v.evidence.length).toBeGreaterThan(0);
   });
-  it('not_contains + only a Grep reference → satisfied(predicate-matched) (the killed near-miss)', () => {
+  it('not_contains + an ambiguous Grep channel → unverifiable, never a silent pass', () => {
     const v = verdictForClaim(readPathClaim('build_report', 'not_contains'), sessWith([], ['build_report']));
-    expect(v).toMatchObject({ status: 'satisfied', reason: 'predicate-matched' });
+    expect(v).toMatchObject({ status: 'unverifiable', reason: 'channel-coverage-incomplete' });
   });
-  it('Codex session (no Read-tool shape) → unverifiable(codex-blind)', () => {
+  it('Codex clean transcript is checkable through its captured command channel', () => {
     const s = { harness: 'codex', events: [] } as unknown as NormalizedSession;
-    expect(verdictForClaim(readPathClaim('build_report', 'not_contains'), s)).toMatchObject({ status: 'unverifiable', reason: 'codex-blind' });
+    expect(verdictForClaim(readPathClaim('build_report', 'not_contains'), s)).toMatchObject({ status: 'satisfied', reason: 'predicate-matched' });
   });
 });
 
@@ -299,7 +299,8 @@ describe('D1 — skill-events honesty (absence is unverifiable, never violated)'
 describe('D1 — window resolver binds opens to the STRUCTURED event (Spike C)', () => {
   const windowedSkillClaim: CheckableClaim = {
     id: 'win', says: 'within the executing-plans window, announces', kind: 'skill-invoked',
-    scope: { kind: 'event-triggered-window', opensOn: 'skill-invoked', closesOn: 'rest-of-session', agentScope: { kind: 'root' } },
+    subject: { kind: 'agent', selector: 'this', delegates: 'exclude' },
+    scope: { kind: 'event-triggered-window', opensOn: 'skill-invoked', closesOn: 'rest-of-session' },
     source: xaSource('p', 'c'),
     predicate: { target: 'message-text', matcher: 'contains', scope: 'transcript', value: 'PHASE 1', role: 'assistant', literalsOnly: true },
   };
@@ -307,14 +308,14 @@ describe('D1 — window resolver binds opens to the STRUCTURED event (Spike C)',
     const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(jsonl([
       assistant([{ type: 'text', text: 'PHASE 1 starting' }], 'a1', '2026-06-08T00:00:01.000Z'),
     ])) }])!;
-    expect(verdictForClaim(windowedSkillClaim, s)).toMatchObject({ status: 'unverifiable', reason: 'window-unresolvable' });
+    expect(verdictForClaim(windowedSkillClaim, s, undefined, undefined, '', { thisAgent: { kind: 'root' } })).toMatchObject({ status: 'unverifiable', reason: 'window-unresolvable' });
   });
   it('a structured Skill open + the literal LATER in the window → satisfied', () => {
     const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(jsonl([
       assistant([{ type: 'tool_use', name: 'Skill', input: { skill: 'executing-plans' } }], 'a1', '2026-06-08T00:00:01.000Z'),
       assistant([{ type: 'text', text: 'PHASE 1 go' }], 'a2', '2026-06-08T00:00:02.000Z'),
     ])) }])!;
-    expect(verdictForClaim(windowedSkillClaim, s).status).toBe('satisfied');
+    expect(verdictForClaim(windowedSkillClaim, s, undefined, undefined, '', { thisAgent: { kind: 'root' } }).status).toBe('satisfied');
   });
   it('the literal BEFORE the window open is NOT counted (window correctly bounds)', () => {
     const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(jsonl([
@@ -322,7 +323,7 @@ describe('D1 — window resolver binds opens to the STRUCTURED event (Spike C)',
       assistant([{ type: 'tool_use', name: 'Skill', input: { skill: 'executing-plans' } }], 'a1', '2026-06-08T00:00:01.000Z'),
     ])) }])!;
     // open exists, but the literal only appears BEFORE it → absent in the window → unverifiable(absent-signal)
-    expect(verdictForClaim(windowedSkillClaim, s)).toMatchObject({ status: 'unverifiable', reason: 'absent-signal' });
+    expect(verdictForClaim(windowedSkillClaim, s, undefined, undefined, '', { thisAgent: { kind: 'root' } })).toMatchObject({ status: 'unverifiable', reason: 'absent-signal' });
   });
 });
 

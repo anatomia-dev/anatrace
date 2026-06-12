@@ -24,6 +24,8 @@ export type {
 
 // The Mandate schema (Phase C — the moat). The boundary-as-a-field keystone.
 export { validateMandate, isValidMandate } from './mandate-validate.js';
+export { loadPolicyYaml } from './policy.js';
+export type { PolicyVerb, PolicyLoadResult } from './policy.js';
 export {
   coverageStat,
   isTranscriptCheckable,
@@ -48,8 +50,31 @@ export type {
   Matcher as PredicateMatcher,
   WindowOpensOn,
   WindowClosesOn,
-  AgentScope,
+  ClaimSubject,
+  FileScopeDeviationHandling,
 } from './mandate.js';
+export type {
+  DelegateManifest,
+  LaneCaptureCoverage,
+  CaptureCoverage,
+  MandateEvaluationContext,
+} from './capture-coverage.js';
+export {
+  channelCoverageForClaim,
+  inspectBehavioralChannels,
+  summarizeVerificationCoverage,
+} from './channels.js';
+export type {
+  BehavioralChannel,
+  ChannelCoverageGapReason,
+  ChannelEvidencePointer,
+  ChannelCoverageGap,
+  ClaimChannelCoverage,
+  VerificationCoverage,
+  ObservedRead,
+  ObservedEgress,
+  ChannelInspection,
+} from './channels.js';
 
 // The subagent-aware ordered timeline (Item 1).
 export type {

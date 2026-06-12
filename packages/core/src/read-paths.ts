@@ -29,9 +29,9 @@ export interface ReadPath {
  * `NotebookRead` is NOT emitted by any adapter (zero in the engine) → not handled (this
  * SUPERSEDES the Spike-B draft's `{Read, NotebookRead}` list — `Read` ONLY).
  *
- * Bash-embedded reads (`cat`/`sed`/`head` of the report) live in a `Bash.command` string and
- * are OUT-OF-SCOPE here (Spike B: 17 corpus-wide, 0 inside verify sessions → zero recall cost);
- * D1 routes them to `unverifiable`, never a verdict.
+ * This exported projection remains the structured `Read`-tool view for substrate consumers.
+ * The verdict layer augments it with the Phase 1 behavioral-channel inspector, which handles
+ * recognized shell readers and fails loud when a command's read effects are unknown.
  */
 export function readPathsOf(session: NormalizedSession): ReadPath[] {
   const out: ReadPath[] = [];

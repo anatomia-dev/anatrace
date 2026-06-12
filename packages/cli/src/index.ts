@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { createRequire } from 'node:module';
 import {
   parseSession,
@@ -9,11 +11,17 @@ import {
   toSarif,
   ciExitCode,
 } from 'anatrace-core';
-import type { Capabilities, Mandate, Severity } from 'anatrace-core';
+import type {
+  Capabilities,
+  Mandate,
+  MandateEvaluationContext,
+  Severity,
+} from 'anatrace-core';
 import { discoverByPath, discoverLast } from './discover.js';
 import { renderJson, renderPretty } from './render.js';
 import { resolveConfig } from './config.js';
-import { mandateShow, resolveMandate } from './mandate.js';
+import { mandateShow, resolveMandate, resolvePolicy } from './mandate.js';
+import { resolveCaptureCoverage } from './capture.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
@@ -23,6 +31,9 @@ interface RunOptions {
   last?: boolean;
   config?: string;
   mandate?: string;
+  policy?: string;
+  role?: string;
+  captureManifest?: string;
   ci?: boolean;
   failOn?: string;
   format?: string;
@@ -45,6 +56,9 @@ program
   .option('--last', 'analyze the most recent local session (~/.claude or ~/.codex)')
   .option('--config <path>', 'path to a JSON config (else .anatrace.json / package.json#anatrace / ~/.anatrace.json)')
   .option('--mandate <dir>', 'verify the session against the mandate extracted from a framework source dir')
+  .option('--policy <path>', 'verify against a generic .anatrace.yaml policy')
+  .option('--role <name>', 'bind policy role:<name> to the root agent for this session')
+  .option('--capture-manifest <path>', 'trusted launcher delegate/capture manifest (JSON)')
   .option('--ci', 'CI gate mode: exit 1 on a violated@error (threshold defaults to error)')
   .option('--fail-on <severity>', 'gate threshold: off | info | warn | error')
   .action((pathArg: string | undefined, opts: RunOptions) => {
@@ -61,6 +75,10 @@ program
     }
     if (opts.failOn !== undefined && !FAIL_ON_VALUES.includes(opts.failOn as Severity)) {
       process.stderr.write(`anatrace: invalid --fail-on ${opts.failOn} (use off | info | warn | error).\n`);
+      process.exit(EXIT_USAGE);
+    }
+    if (opts.mandate && opts.policy) {
+      process.stderr.write('anatrace: --mandate conflicts with --policy.\n');
       process.exit(EXIT_USAGE);
     }
 
@@ -82,23 +100,49 @@ program
       process.exit(EXIT_USAGE);
     }
 
-    // ── resolve the mandate (explicit --mandate only; NO auto-discovery — that would overfit). ─
+    // Generic policy auto-discovery is intentionally narrow: the one standard filename only.
+    // Framework mandate extraction remains explicit so the CLI never guesses a framework.
     let mandate: Mandate | undefined;
     let capabilities: Capabilities | undefined;
-    if (opts.mandate !== undefined) {
-      const res = resolveMandate(opts.mandate);
+    let mandateContext: MandateEvaluationContext | undefined;
+    const defaultPolicy = path.join(process.cwd(), '.anatrace.yaml');
+    const policyPath = opts.policy ?? (fs.existsSync(defaultPolicy) ? defaultPolicy : undefined);
+    if (opts.mandate !== undefined || policyPath !== undefined) {
+      const res =
+        opts.mandate !== undefined
+          ? resolveMandate(opts.mandate)
+          : resolvePolicy(policyPath!);
       if (!res.ok) {
         process.stderr.write(res.message + '\n');
         process.exit(EXIT_USAGE);
       }
       mandate = res.mandate;
       capabilities = { contentResolver: res.resolver };
+      mandateContext = {
+        thisAgent: { kind: 'root' },
+        ...(opts.role ? { roleBindings: { [opts.role]: [{ kind: 'root' }] } } : {}),
+      };
+      if (opts.captureManifest) {
+        const coverage = resolveCaptureCoverage(opts.captureManifest);
+        if (!coverage.ok) {
+          process.stderr.write(coverage.message + '\n');
+          process.exit(EXIT_USAGE);
+        }
+        mandateContext.captureCoverage = coverage.coverage;
+      }
     }
 
     // Supply the project root the CLI runs from so file-scope normalization can relativize
     // ABSOLUTE non-worktree source edits. With no mandate the compliance pass is a no-op, so the
     // no-mandate path stays byte-identical to before (R2 byte-identity).
-    const report = analyze(session, config, capabilities, mandate, process.cwd());
+    const report = analyze(
+      session,
+      config,
+      capabilities,
+      mandate,
+      process.cwd(),
+      mandateContext,
+    );
 
     // ── the GATING set: violated-only compliance findings (NEVER report.findings). ──────────
     const gateSet = mandate
@@ -106,7 +150,13 @@ program
       : [];
 
     if (format === 'sarif') {
-      process.stdout.write(JSON.stringify(toSarif(gateSet), null, 2) + '\n');
+      process.stdout.write(
+        JSON.stringify(
+          toSarif(gateSet, 'anatrace', report.verificationCoverage),
+          null,
+          2,
+        ) + '\n',
+      );
     } else {
       const skills = skillsInvoked(session); // B2 — the SkillEvent consumer (render projection)
       process.stdout.write((format === 'json' ? renderJson(report, skills) : renderPretty(report, skills)) + '\n');

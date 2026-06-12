@@ -12,6 +12,7 @@ import type {
   ScopeShapeFacts,
 } from './meta/facts.js';
 import type { GitOpsSummary } from './meta/git-ops.js';
+import type { VerificationCoverage } from './channels.js';
 
 /**
  * The stable, versioned run-output envelope (REQ Item 10). Consumers script against it ⇒
@@ -65,4 +66,6 @@ export interface Report {
   dossier?: Dossier;
   /** D — the `routed-to-llm` residue manifest (the judge's input); present iff a mandate was supplied. */
   hookRequests?: HookRequest[];
+  /** Claim-keyed receipt for which behavioral channels were completely inspected. */
+  verificationCoverage?: VerificationCoverage;
 }

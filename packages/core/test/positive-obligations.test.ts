@@ -211,15 +211,17 @@ describe('PO #2 — the cardinal-sin guard: required absent on an UNOBSERVABLE/I
       kind: 'skill-invoked',
       source: inBlob,
       strength: 'required',
+      subject: { kind: 'agent', selector: 'this', delegates: 'exclude' },
       scope: {
         kind: 'event-triggered-window',
         opensOn: 'skill-invoked',
         closesOn: 'rest-of-session',
-        agentScope: { kind: 'subagent', subagentId: 'w' },
       },
       predicate: { target: 'skill-events', scope: 'transcript', matcher: 'contains', value: 'testing-standards' },
     };
-    const v = verdictForClaim(windowedRequired, s);
+    const v = verdictForClaim(windowedRequired, s, undefined, undefined, '', {
+      thisAgent: { kind: 'subagent', subagentId: 'w' },
+    });
     expect(v.status).not.toBe('violated');
     expect(v).toMatchObject({ status: 'unverifiable', reason: 'low-confidence' });
   });

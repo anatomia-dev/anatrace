@@ -158,10 +158,11 @@ describe('C4 — EXTRACTION-CORRECTNESS goldens (the #1 risk: did the adapter ai
     // dispatch fan-out → confidence:'low' (nested windows degrade to unverifiable).
     const dispatch = extracted.claims.find((c) => c.kind === 'dispatch')!;
     expect(dispatch.confidence).toBe('low');
-    // Every event-triggered-window claim carries the MANDATORY agentScope (concurrency axis).
+    // Every event-triggered-window claim carries one single-lane subject (identity axis).
     for (const c of extracted.claims) {
       if (c.scope.kind === 'event-triggered-window') {
-        expect(c.scope.agentScope).toBeDefined();
+        expect(c.subject).toMatchObject({ delegates: 'exclude' });
+        expect('agentScope' in c.scope).toBe(false);
       }
     }
   });

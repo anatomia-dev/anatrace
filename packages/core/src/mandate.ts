@@ -15,9 +15,9 @@
  *
  * Forward-compat (DECISION A — reserve broadly, implement narrowly): every additive slot is
  * present in the type now so nothing forces a later reshape — `scope-depth` (window nesting),
- * `event-order` (predicate target), `guard?` (conditional carve-out), `confidence?`,
- * `agentScope?`. Only the cheap high-value ones are *implemented* in C; the rest route to the
- * LLM (`intent`) in v1.
+ * `event-order` (predicate target), `guard?` (conditional carve-out), `confidence?`, and the
+ * orthogonal `subject?` identity axis. Only the cheap high-value ones are *implemented* in C;
+ * the rest route to the LLM (`intent`) in v1.
  */
 
 /**
@@ -73,14 +73,6 @@ export type WindowClosesOn =
   | 'marker-text'
   | 'scope-depth'; // RESERVED — do NOT implement in C
 
-/**
- * The agent timeline a windowed claim is scoped to (concurrency correct-by-construction).
- * Bound to the engine's per-event `AgentRef` (`session.ts`): `{kind:'root'}` or a specific
- * `{kind:'subagent', subagentId}`. MANDATORY on every `event-triggered-window` claim so a
- * flat window never mis-attributes across concurrent subagent timelines.
- */
-export type AgentScope = { kind: 'root' } | { kind: 'subagent'; subagentId: string };
-
 /** Whole-session / a single event-triggered window / a cross-session span. */
 export type ClaimScope =
   | { kind: 'whole-session' }
@@ -90,10 +82,20 @@ export type ClaimScope =
       closesOn: WindowClosesOn;
       /** The marker literal when `closesOn === 'marker-text'`. */
       marker?: string;
-      /** MANDATORY on every windowed claim — concurrency axis (no cross-timeline mis-attribution). */
-      agentScope: AgentScope;
     }
   | { kind: 'cross-session' };
+
+/**
+ * WHO a claim applies to. This is deliberately independent from {@link ClaimScope}, which
+ * answers WHEN. A claim never carries identity inside its temporal scope.
+ *
+ * `subject` is optional only for backward compatibility with pre-subject Mandates. Omitted
+ * means the legacy flat session union. New loaders and adapters MUST emit it explicitly.
+ */
+export type ClaimSubject =
+  | { kind: 'agent'; selector: 'this'; delegates: 'exclude' | 'include' }
+  | { kind: 'session' }
+  | { kind: 'role'; role: string; delegates: 'exclude' | 'include' };
 
 /**
  * The closed predicate-target vocabulary (NEVER a selector DSL — the live `contract.yaml`
@@ -112,6 +114,7 @@ export type PredicateTarget =
   | 'edit-paths'
   | 'tool-names'
   | 'command-content'
+  | 'egress'
   | 'read-paths'
   | 'skill-events'
   | 'message-text'
@@ -201,12 +204,23 @@ export type ClaimPredicate = MessageTextPredicate | GenericPredicate;
  */
 export type ClaimStrength = 'required' | 'optional' | 'forbidden';
 
+/**
+ * How an edit allowlist treats a large out-of-scope spread. Framework-extracted contracts may
+ * be under-specified (`adaptive`); a directly authored `.anatrace.yaml only_edit` is `strict`.
+ */
+export type FileScopeDeviationHandling = 'adaptive' | 'strict';
+
 /** Fields every claim carries regardless of kind. */
 interface ClaimBase {
   /** Stable, human-meaningful — the join key to verdicts/proof-chain. */
   id: string;
   /** Human-readable obligation, verbatim from the source where possible. */
   says: string;
+  /**
+   * Identity axis (WHO), independent from `scope` (WHEN). Omitted preserves the legacy flat
+   * session union; all new policy loaders and migrated adapters emit an explicit subject.
+   */
+  subject?: ClaimSubject;
   scope: ClaimScope;
   source: ClaimSource;
   /**
@@ -220,6 +234,8 @@ interface ClaimBase {
    * absence/presence arms. See {@link ClaimStrength}.
    */
   strength?: ClaimStrength;
+  /** File-scope-only; absent preserves the legacy adaptive MASS-finding behavior. */
+  deviationHandling?: FileScopeDeviationHandling;
 }
 
 /**

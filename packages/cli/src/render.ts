@@ -38,6 +38,22 @@ export function renderPretty(report: Report, skills: SkillInvocation[] = []): st
     `  turns ${session.counts.turns} · tool_calls ${session.counts.tool_calls} · commands ${session.counts.commands_run} · files ${session.counts.files_touched}`,
   );
   if (skills.length) lines.push(`  skills: ${skillsLabel(skills)}`);
+  if (report.verificationCoverage) {
+    const coverage = report.verificationCoverage;
+    lines.push(
+      `  coverage: checked ${coverage.fullyCheckedClaims} of ${coverage.totalClaims} claims`,
+    );
+    for (const claim of coverage.unverifiableClaims) {
+      lines.push(`    ${claim.claimId}: unverifiable:${claim.reason}`);
+    }
+    for (const claim of coverage.claims) {
+      if (claim.gaps.length === 0) continue;
+      const gaps = claim.gaps
+        .map((gap) => `${gap.channel}:${gap.reason}:${gap.source}`)
+        .join(', ');
+      lines.push(`    ${claim.claimId}: ${gaps}`);
+    }
+  }
   lines.push(
     cost.priced
       ? `  cost: ~$${cost.usd.toFixed(4)} (est. API-equivalent, priced as-of ${cost.priced_as_of})`

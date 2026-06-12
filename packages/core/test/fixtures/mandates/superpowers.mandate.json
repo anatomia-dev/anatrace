@@ -6,13 +6,15 @@
       "id": "executing-plans:announced",
       "says": "announces \"I'm using the executing-plans skill to implement this plan.\" at start",
       "kind": "skill-announced",
+      "subject": {
+        "kind": "agent",
+        "selector": "this",
+        "delegates": "exclude"
+      },
       "scope": {
         "kind": "event-triggered-window",
         "opensOn": "skill-announced",
-        "closesOn": "next-skill-announce",
-        "agentScope": {
-          "kind": "root"
-        }
+        "closesOn": "next-skill-announce"
       },
       "source": {
         "kind": "in-blob",
@@ -32,13 +34,15 @@
       "id": "subagent-driven-development:dispatch",
       "says": "subagent-driven-development dispatches subagents",
       "kind": "dispatch",
+      "subject": {
+        "kind": "agent",
+        "selector": "this",
+        "delegates": "exclude"
+      },
       "scope": {
         "kind": "event-triggered-window",
         "opensOn": "skill-announced",
-        "closesOn": "next-skill-announce",
-        "agentScope": {
-          "kind": "root"
-        }
+        "closesOn": "next-skill-announce"
       },
       "source": {
         "kind": "in-blob",

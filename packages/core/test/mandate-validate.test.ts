@@ -105,39 +105,23 @@ describe('validateMandate — structural checks', () => {
   });
 });
 
-describe('validateMandate — event-triggered-window requires agentScope (concurrency axis)', () => {
-  it('rejects a windowed claim that omits agentScope', () => {
+describe('validateMandate — window identity lives only on ClaimSubject', () => {
+  it('rejects a windowed claim that omits a single-lane subject', () => {
     const m = wrap({
       kind: 'skill-announced',
       scope: {
         kind: 'event-triggered-window',
         opensOn: 'skill-announced',
         closesOn: 'next-skill-announce',
-      } as never, // agentScope deliberately omitted (hand-authored / future-adapter mistake)
+      },
     });
     expect(isValidMandate(m)).toBe(false);
     expect(validateMandate(m).join(' ')).toMatch(
-      /event-triggered-window claim must set agentScope/,
+      /requires a single-lane subject/,
     );
   });
 
-  it('rejects a windowed claim with a malformed agentScope', () => {
-    const m = wrap({
-      kind: 'skill-announced',
-      scope: {
-        kind: 'event-triggered-window',
-        opensOn: 'skill-announced',
-        closesOn: 'next-skill-announce',
-        agentScope: { kind: 'subagent' }, // missing subagentId
-      } as never,
-    });
-    expect(isValidMandate(m)).toBe(false);
-    expect(validateMandate(m).join(' ')).toMatch(
-      /event-triggered-window claim must set agentScope/,
-    );
-  });
-
-  it('accepts a windowed claim with a root agentScope', () => {
+  it('rejects legacy scope.agentScope so the two identity axes cannot coexist', () => {
     const m = wrap({
       kind: 'skill-announced',
       scope: {
@@ -145,20 +129,37 @@ describe('validateMandate — event-triggered-window requires agentScope (concur
         opensOn: 'skill-announced',
         closesOn: 'next-skill-announce',
         agentScope: { kind: 'root' },
+      } as never,
+      subject: { kind: 'agent', selector: 'this', delegates: 'exclude' },
+    });
+    expect(isValidMandate(m)).toBe(false);
+    expect(validateMandate(m).join(' ')).toMatch(
+      /scope\.agentScope was replaced by claim\.subject/,
+    );
+  });
+
+  it('accepts a windowed claim with a single current-agent subject', () => {
+    const m = wrap({
+      kind: 'skill-announced',
+      scope: {
+        kind: 'event-triggered-window',
+        opensOn: 'skill-announced',
+        closesOn: 'next-skill-announce',
       },
+      subject: { kind: 'agent', selector: 'this', delegates: 'exclude' },
     });
     expect(validateMandate(m)).toEqual([]);
   });
 
-  it('accepts a windowed claim with a subagent agentScope', () => {
+  it('accepts a windowed claim with a single role subject', () => {
     const m = wrap({
       kind: 'dispatch',
       scope: {
         kind: 'event-triggered-window',
         opensOn: 'dispatch',
         closesOn: 'rest-of-session',
-        agentScope: { kind: 'subagent', subagentId: 'sub-1' },
       },
+      subject: { kind: 'role', role: 'build', delegates: 'exclude' },
     });
     expect(validateMandate(m)).toEqual([]);
   });
