@@ -11,7 +11,7 @@
     "test": "pnpm -r --stream run test",
     "lint": "pnpm -r --stream run lint",
     "typecheck": "pnpm -r --stream run typecheck",
-    "check": "pnpm typecheck && pnpm build && pnpm test && pnpm lint",
+    "check": "pnpm build && pnpm typecheck && pnpm test && pnpm lint",
     "prepare": "husky || true"
   },
   "devDependencies": {
