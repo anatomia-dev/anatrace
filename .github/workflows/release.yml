@@ -14,6 +14,22 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version: 24, registry-url: https://registry.npmjs.org, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r run build
-      - run: pnpm -r run test
+      - run: pnpm check
+      - run: cd packages/core && npm pack --dry-run
+      - run: cd packages/core && npx publint@0.3.21
+      - run: cd packages/core && npx @arethetypeswrong/cli@0.18.3 --pack --ignore-rules cjs-resolves-to-esm no-resolution
+      - run: cd packages/cli && npm pack --dry-run
+      - run: cd packages/cli && npx publint@0.3.21
+      - run: cd packages/cli && npx @arethetypeswrong/cli@0.18.3 --pack --ignore-rules cjs-resolves-to-esm no-resolution
+      - name: Smoke-test packed packages
+        run: |
+          pack_dir="$(mktemp -d)"
+          consumer_dir="$(mktemp -d)"
+          pnpm --dir packages/core pack --pack-destination "$pack_dir"
+          pnpm --dir packages/cli pack --pack-destination "$pack_dir"
+          cd "$consumer_dir"
+          npm init -y
+          npm install "$pack_dir"/anatrace-core-*.tgz "$pack_dir"/anatrace-*.tgz
+          node --input-type=module -e "import * as core from 'anatrace-core'; if (typeof core.parseSession !== 'function') throw new Error('parseSession export missing')"
+          ./node_modules/.bin/anatrace --version
       - run: pnpm exec changeset publish      # token-less via OIDC; requires TP configured (Step B6)

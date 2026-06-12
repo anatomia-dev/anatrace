@@ -1,6 +1,6 @@
 {
   "name": "anatrace",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Deterministic cross-harness transcript verification for AI agents",
   "type": "module",
   "license": "MIT",
@@ -10,11 +10,33 @@
     "directory": "packages/cli"
   },
   "homepage": "https://github.com/anatomia-dev/anatrace#readme",
-  "bin": { "anatrace": "./dist/index.mjs" },
-  "files": ["dist"],
-  "publishConfig": { "access": "public", "provenance": true },
+  "bugs": {
+    "url": "https://github.com/anatomia-dev/anatrace/issues"
+  },
+  "keywords": [
+    "ai-agents",
+    "attestation",
+    "claude-code",
+    "codex",
+    "policy",
+    "transcripts",
+    "verification"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "bin": {
+    "anatrace": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "dependencies": {
-    "anatrace-core": "workspace:*",
+    "anatrace-core": "workspace:^",
     "commander": "^14.0.3"
   },
   "scripts": {

@@ -12,11 +12,16 @@ within it. Across both harnesses, entirely on your machine.
 - **Local** — no network, no upload. Your transcripts never leave your machine.
 - **Cross-harness** — one model over Claude *and* Codex.
 
-> **Status: pre-v0.1, actively developed.** The cross-harness engine, the
-> Mandate schema + adapters, and the deterministic verdict layer have landed.
-> The LLM-judge seam (designed, not wired), the SARIF GitHub Action, and
-> additional framework adapters are next. Public APIs may still shift before
-> v0.1.
+> **Status: v0.1 release candidate.** The cross-harness engine, generic policy
+> loader, deterministic verdict layer, fail-loud channel coverage, and coarse
+> egress detection have landed. Public APIs remain pre-1.0 and may evolve.
+
+## Install
+
+```sh
+npm install anatrace-core
+npm install --global anatrace
+```
 
 ## What it does today
 
@@ -38,6 +43,10 @@ within it. Across both harnesses, entirely on your machine.
   and lists typed blind spots. Unknown tools or unsupported shell commands
   downgrade a clean negative to `unverifiable`; observed violations remain
   violations.
+
+This first release is the honest engine, not the final audit artifact. It
+provides deterministic transcript verification with explicit coverage limits.
+Timestamped and hashed portable attestations remain a later phase.
 
 ## Generic policy
 
