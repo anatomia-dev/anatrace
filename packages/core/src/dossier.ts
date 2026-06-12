@@ -12,6 +12,7 @@ import type { ContentResolver } from './types.js';
 import type { ComplianceVerdict } from './verdict.js';
 import { coverageStat, type CoverageStat } from './mandate-coverage.js';
 import { scrubText, type ScrubbedExcerpt } from './scrub.js';
+import type { VerificationCoverage } from './channels.js';
 
 /** The dossier schema version (additive; independent of `Report.schemaVersion`). */
 export const DOSSIER_SCHEMA_VERSION = 1;
@@ -41,6 +42,7 @@ export interface Dossier {
   satisfied: DossierClaimSlice[];
   violated: DossierClaimSlice[];
   unverifiable: DossierClaimSlice[];
+  verificationCoverage?: VerificationCoverage;
 }
 
 function scopeLabel(claim: MandateClaim): string {
@@ -110,6 +112,7 @@ export function buildDossier(
   mandate: Mandate,
   verdicts: ComplianceVerdict[],
   _resolver?: ContentResolver,
+  verificationCoverage?: VerificationCoverage,
 ): Dossier {
   const byId = new Map(mandate.claims.map((c) => [c.id, c]));
   const satisfied: DossierClaimSlice[] = [];
@@ -129,6 +132,7 @@ export function buildDossier(
     satisfied,
     violated,
     unverifiable,
+    ...(verificationCoverage ? { verificationCoverage } : {}),
   };
 }
 

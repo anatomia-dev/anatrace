@@ -182,13 +182,14 @@ describe('D1 — forbidden-edit is cross-harness real (Codex patch_apply_end edi
   });
 });
 
-// ─── R2 byte-identity: no mandate ⇒ the three fields are omitted ──────────────────────────
-describe('D — analyze without a mandate stays R2-byte-identical (the 3 fields omitted)', () => {
-  it('no mandate ⇒ no compliance/dossier/hookRequests keys', () => {
+// ─── R2 byte-identity: no mandate ⇒ mandate-derived fields are omitted ───────────────────
+describe('D — analyze without a mandate stays R2-byte-identical', () => {
+  it('no mandate ⇒ no compliance/dossier/hookRequests/verificationCoverage keys', () => {
     const s = claudeAdapter.parse([{ name: 'parent', bytes: enc(jsonl([assistant([], 'a1', '2026-06-08T00:00:01.000Z')])) }])!;
     const r = analyze(s);
     expect('compliance' in r).toBe(false);
     expect('dossier' in r).toBe(false);
     expect('hookRequests' in r).toBe(false);
+    expect('verificationCoverage' in r).toBe(false);
   });
 });

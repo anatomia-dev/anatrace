@@ -9,6 +9,7 @@
  * `unverifiable` as a SARIF `note` floods GitHub code-scanning.
  */
 import type { Finding, Severity } from './types.js';
+import type { VerificationCoverage } from './channels.js';
 
 /** `Severity` → SARIF level. `off` is omitted (the result is dropped). */
 export function sarifLevel(severity: Severity): 'error' | 'warning' | 'note' | null {
@@ -35,7 +36,11 @@ export interface SarifResult {
 export interface SarifLog {
   $schema: string;
   version: '2.1.0';
-  runs: Array<{ tool: { driver: { name: string; rules: Array<{ id: string }> } }; results: SarifResult[] }>;
+  runs: Array<{
+    tool: { driver: { name: string; rules: Array<{ id: string }> } };
+    results: SarifResult[];
+    properties?: { verificationCoverage: VerificationCoverage };
+  }>;
 }
 
 /**
@@ -43,7 +48,11 @@ export interface SarifLog {
  * emitted. The caller passes the GATING findings (the `violated`-mapped ones); satisfied/
  * unverifiable never reach here.
  */
-export function toSarif(findings: Finding[], toolName = 'anatrace'): SarifLog {
+export function toSarif(
+  findings: Finding[],
+  toolName = 'anatrace',
+  verificationCoverage?: VerificationCoverage,
+): SarifLog {
   const results: SarifResult[] = [];
   const ruleIds = new Set<string>();
   for (const f of findings) {
@@ -71,7 +80,11 @@ export function toSarif(findings: Finding[], toolName = 'anatrace'): SarifLog {
   return {
     $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
     version: '2.1.0',
-    runs: [{ tool: { driver: { name: toolName, rules: [...ruleIds].map((id) => ({ id })) } }, results }],
+    runs: [{
+      tool: { driver: { name: toolName, rules: [...ruleIds].map((id) => ({ id })) } },
+      results,
+      ...(verificationCoverage ? { properties: { verificationCoverage } } : {}),
+    }],
   };
 }
 

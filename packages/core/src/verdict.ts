@@ -33,10 +33,15 @@ import type {
   CaptureCoverage,
   MandateEvaluationContext,
 } from './capture-coverage.js';
-import { readPathsOf } from './read-paths.js';
 import { skillsInvokedInScope } from './skills.js';
 import { laneCapture, isGradeableCapture } from './meta/lane.js';
 import { commandStringOf } from './derive.js';
+import {
+  channelCoverageForClaim,
+  incompleteChannelCoverageForClaim,
+  inspectBehavioralChannels,
+  type ClaimChannelCoverage,
+} from './channels.js';
 import {
   classifyEditPath,
   normalizeEditPath,
@@ -62,6 +67,7 @@ export type VerdictReason =
   | 'codex-blind' // a Claude-only signal on a Codex session
   | 'subject-unresolvable' // this-agent / role binding was absent or ambiguous
   | 'delegate-coverage-incomplete' // no complete trusted delegate manifest / missing declared lane
+  | 'channel-coverage-incomplete' // a relevant tool/command channel could not be classified
   | 'window-unresolvable'; // an event-triggered window couldn't be bounded
 
 /** Evidence POINTS into the canonical timeline; it never COPIES bytes (scrub-safe, determinism-trivial). */
@@ -298,6 +304,13 @@ export function verdictForClaim(
     sink,
     repoRoot,
   );
+  const channelCoverage = channelCoverageForClaim(claim, scopedEvents);
+  if (
+    resultProvesAbsence(claim, result) &&
+    channelCoverage.gaps.length > 0
+  ) {
+    return verdict(claim.id, 'unverifiable', 'channel-coverage-incomplete');
+  }
   if (
     resultProvesAbsence(claim, result) &&
     !subject.delegateComplete
@@ -333,9 +346,7 @@ function dispatchTarget(
     case 'command-content':
       return evalCommandContent(claim, predicate, session, scopedEvents);
     case 'egress':
-      // Phase 1 implements the deterministic egress channel model. The Phase 0 loader may
-      // already declare the obligation, but it cannot silently pass before that model exists.
-      return verdict(claim.id, 'unverifiable', 'routed-to-llm');
+      return evalEgress(claim, predicate, scopedEvents);
     case 'file-content':
       return evalFileContent(claim, predicate, resolver);
     case 'event-order':
@@ -346,7 +357,7 @@ function dispatchTarget(
   }
 }
 
-/** A Codex session has no Read-tool / Skill-tool / subagent primitives → many signals are blind. */
+/** Codex still lacks structured Skill/subagent primitives; read checks now use shell channels. */
 function codexBlindable(session: NormalizedSession): boolean {
   return session.harness === 'codex';
 }
@@ -374,32 +385,31 @@ function isComparableMatcher(matcher: string): boolean {
 /**
  * Bind to the `Read` tool's `file_path` ONLY (Spike B: precision 1.0). Negative-matcher
  * mapping (pinned): absence of the path → `satisfied(predicate-matched)`; presence →
- * `violated(predicate-not-matched)`. Codex (no Read-tool shape) → `codex-blind`.
+ * `violated(predicate-not-matched)`. Phase 1 also inspects recognized shell read channels.
  */
 function evalReadPaths(
   claim: MandateClaim,
   predicate: ClaimPredicate,
   session: NormalizedSession,
 ): ComplianceVerdict {
-  if (codexBlindable(session)) return verdict(claim.id, 'unverifiable', 'codex-blind');
   // FI-17 — matcher totality: a matcher this arm can't mechanically compare → unverifiable.
   if (!isComparableMatcher(predicate.matcher)) {
     return verdict(claim.id, 'unverifiable', 'content-unresolvable');
   }
   const needle = String(predicate.value ?? '');
-  const reads = readPathsOf(session);
+  const reads = inspectBehavioralChannels(session.events).reads;
   const hits = reads.filter((r) => matchStr(r.path, predicate.matcher, needle));
   const isNegative = NEGATIVE_MATCHERS.has(predicate.matcher);
   if (isNegative) {
     // `not_contains 'build_report'`: a hit (path CONTAINS it) is a VIOLATION of the obligation.
     if (hits.length > 0) {
-      return verdict(claim.id, 'violated', 'predicate-not-matched', hits.map((h) => ({ blobName: h.blobName, lineIndex: h.lineIndex, agent: h.agent, eventType: 'tool' as const })));
+      return verdict(claim.id, 'violated', 'predicate-not-matched', hits.map((h) => h.evidence));
     }
     return verdict(claim.id, 'satisfied', 'predicate-matched');
   }
   // Positive matcher: a hit is satisfaction.
   if (hits.length > 0) {
-    return verdict(claim.id, 'satisfied', 'predicate-matched', hits.map((h) => ({ blobName: h.blobName, lineIndex: h.lineIndex, agent: h.agent, eventType: 'tool' as const })));
+    return verdict(claim.id, 'satisfied', 'predicate-matched', hits.map((h) => h.evidence));
   }
   return verdict(claim.id, 'unverifiable', 'absent-signal');
 }
@@ -415,10 +425,7 @@ function readScopeVerdict(
   session: NormalizedSession,
   repoRoot = '',
 ): ComplianceVerdict {
-  const reads = readPathsOf(session);
-  if (reads.length === 0 && codexBlindable(session)) {
-    return verdict(claimId, 'unverifiable', 'codex-blind');
-  }
+  const reads = inspectBehavioralChannels(session.events).reads;
   const outside: EvidencePointer[] = [];
   for (const read of reads) {
     const normalized = normalizeEditPath(read.path, repoRoot);
@@ -427,15 +434,49 @@ function readScopeVerdict(
     }
     if (whitelist.has(normalized)) continue;
     outside.push({
-      blobName: read.blobName,
-      lineIndex: read.lineIndex,
-      agent: read.agent,
-      eventType: 'tool',
+      ...read.evidence,
     });
   }
   return outside.length > 0
     ? verdict(claimId, 'violated', 'predicate-not-matched', outside)
     : verdict(claimId, 'satisfied', 'predicate-matched');
+}
+
+// ─── egress ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Phase 1 intentionally implements the coarse, buyer-relevant rule: any observed external
+ * shell/network/MCP action violates `never_egress`. Destination/resource allowlists belong
+ * to the Phase 3 taxonomy. Unknown relevant channels are handled by the universal coverage
+ * gate after dispatch, never silently treated as clean.
+ */
+function evalEgress(
+  claim: MandateClaim,
+  predicate: ClaimPredicate,
+  scopedEvents: SessionEvent[],
+): ComplianceVerdict {
+  if (!isComparableMatcher(predicate.matcher)) {
+    return verdict(claim.id, 'unverifiable', 'content-unresolvable');
+  }
+  const observed = inspectBehavioralChannels(scopedEvents).egress;
+  const isNegative = NEGATIVE_MATCHERS.has(predicate.matcher) || claim.strength === 'forbidden';
+  if (isNegative) {
+    return observed.length > 0
+      ? verdict(
+          claim.id,
+          'violated',
+          'predicate-not-matched',
+          observed.map((item) => item.evidence),
+        )
+      : verdict(claim.id, 'satisfied', 'predicate-matched');
+  }
+  return observed.length > 0
+    ? verdict(
+        claim.id,
+        'satisfied',
+        'predicate-matched',
+        observed.map((item) => item.evidence),
+      )
+    : verdict(claim.id, 'unverifiable', 'absent-signal');
 }
 
 // ─── the observability + completeness gate (P2-GATE, D-B) ────────────────────────────────
@@ -1015,6 +1056,7 @@ export function verdictsForMandate(
   findingsOut?: { ruleId: string; message: string; source: string; count: number }[],
   repoRoot = '',
   context?: MandateEvaluationContext,
+  coverageOut?: ClaimChannelCoverage[],
 ): ComplianceVerdict[] {
   const sink: FileScopeFindingSink | undefined = findingsOut
     ? { push: (f) => findingsOut.push(f) }
@@ -1050,6 +1092,8 @@ export function verdictsForMandate(
 
   const out: ComplianceVerdict[] = [];
   for (const claim of mandate.claims) {
+    const channelCoverage = claimChannelCoverage(claim, session, context);
+    coverageOut?.push(channelCoverage);
     if (
       claim.kind === 'file-scope' &&
       claim.predicate &&
@@ -1087,15 +1131,40 @@ export function verdictsForMandate(
             )
           : readScopeVerdict(claim.id, whitelist, scopedSession, root);
       out.push(
-        result.status === 'satisfied' && !subject.delegateComplete
-          ? verdict(claim.id, 'unverifiable', 'delegate-coverage-incomplete')
-          : result,
+        result.status === 'satisfied' && channelCoverage.gaps.length > 0
+          ? verdict(claim.id, 'unverifiable', 'channel-coverage-incomplete')
+          : result.status === 'satisfied' && !subject.delegateComplete
+            ? verdict(claim.id, 'unverifiable', 'delegate-coverage-incomplete')
+            : result,
       );
       continue;
     }
     out.push(verdictForClaim(claim, session, resolver, sink, repoRoot, context));
   }
   return out;
+}
+
+function claimChannelCoverage(
+  claim: MandateClaim,
+  session: NormalizedSession,
+  context: MandateEvaluationContext | undefined,
+): ClaimChannelCoverage {
+  const subject = resolveSubject(claim, session, context);
+  if (!subject) return incompleteChannelCoverageForClaim(claim, 'subject-unresolvable');
+  let events = subject.events;
+  if (claim.scope.kind === 'event-triggered-window') {
+    if (subject.agents.length !== 1) {
+      return incompleteChannelCoverageForClaim(claim, 'window-unresolvable');
+    }
+    const agent = subject.agents[0];
+    if (!agent) return incompleteChannelCoverageForClaim(claim, 'window-unresolvable');
+    const window = resolveWindow(claim.scope.opensOn, agent, subject.events);
+    if (!window) return incompleteChannelCoverageForClaim(claim, 'window-unresolvable');
+    events = window;
+  } else if (claim.scope.kind === 'cross-session') {
+    return incompleteChannelCoverageForClaim(claim, 'window-unresolvable');
+  }
+  return channelCoverageForClaim(claim, events);
 }
 
 function sourceLabelOf(claim: MandateClaim): string {

@@ -59,8 +59,11 @@ Delegate-inclusive negative conclusions require launcher-supplied
 `unverifiable: delegate-coverage-incomplete`. Detected violations remain
 provable without completeness.
 
-Phase 0 accepts `never_egress`, but egress remains `unverifiable` until the
-channel-complete Phase 1 detector lands.
+`never_read` covers structured reads and recognized shell readers.
+`never_egress` covers shell network commands, network tools, and MCP calls.
+Unknown tools and unsupported commands produce
+`unverifiable: channel-coverage-incomplete`, with typed details in
+`Report.verificationCoverage` and `Dossier.verificationCoverage`.
 
 See the [repository README](https://github.com/anatomia-dev/anatrace#readme) for
 CLI usage and the full honesty contract.

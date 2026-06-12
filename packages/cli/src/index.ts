@@ -150,7 +150,13 @@ program
       : [];
 
     if (format === 'sarif') {
-      process.stdout.write(JSON.stringify(toSarif(gateSet), null, 2) + '\n');
+      process.stdout.write(
+        JSON.stringify(
+          toSarif(gateSet, 'anatrace', report.verificationCoverage),
+          null,
+          2,
+        ) + '\n',
+      );
     } else {
       const skills = skillsInvoked(session); // B2 — the SkillEvent consumer (render projection)
       process.stdout.write((format === 'json' ? renderJson(report, skills) : renderPretty(report, skills)) + '\n');

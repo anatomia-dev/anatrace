@@ -137,13 +137,13 @@ describe('D1 — read-paths binds to Read.file_path; negative-matcher mapping pi
     expect(v).toMatchObject({ status: 'violated', reason: 'predicate-not-matched' });
     expect(v.evidence.length).toBeGreaterThan(0);
   });
-  it('not_contains + only a Grep reference → satisfied(predicate-matched) (the killed near-miss)', () => {
+  it('not_contains + an ambiguous Grep channel → unverifiable, never a silent pass', () => {
     const v = verdictForClaim(readPathClaim('build_report', 'not_contains'), sessWith([], ['build_report']));
-    expect(v).toMatchObject({ status: 'satisfied', reason: 'predicate-matched' });
+    expect(v).toMatchObject({ status: 'unverifiable', reason: 'channel-coverage-incomplete' });
   });
-  it('Codex session (no Read-tool shape) → unverifiable(codex-blind)', () => {
+  it('Codex clean transcript is checkable through its captured command channel', () => {
     const s = { harness: 'codex', events: [] } as unknown as NormalizedSession;
-    expect(verdictForClaim(readPathClaim('build_report', 'not_contains'), s)).toMatchObject({ status: 'unverifiable', reason: 'codex-blind' });
+    expect(verdictForClaim(readPathClaim('build_report', 'not_contains'), s)).toMatchObject({ status: 'satisfied', reason: 'predicate-matched' });
   });
 });
 

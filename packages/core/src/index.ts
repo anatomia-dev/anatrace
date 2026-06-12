@@ -59,6 +59,22 @@ export type {
   CaptureCoverage,
   MandateEvaluationContext,
 } from './capture-coverage.js';
+export {
+  channelCoverageForClaim,
+  inspectBehavioralChannels,
+  summarizeVerificationCoverage,
+} from './channels.js';
+export type {
+  BehavioralChannel,
+  ChannelCoverageGapReason,
+  ChannelEvidencePointer,
+  ChannelCoverageGap,
+  ClaimChannelCoverage,
+  VerificationCoverage,
+  ObservedRead,
+  ObservedEgress,
+  ChannelInspection,
+} from './channels.js';
 
 // The subagent-aware ordered timeline (Item 1).
 export type {

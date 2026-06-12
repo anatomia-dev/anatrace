@@ -34,6 +34,10 @@ within it. Across both harnesses, entirely on your machine.
   none. Gate CI with `--ci` / `--fail-on`, or emit `--format sarif` for code
   scanning. *(File-scope adherence is the headline check; its accuracy is
   exemplar-validated today — a measured precision/recall is in progress.)*
+- **Channel coverage** — every policy run states how many claims were checked
+  and lists typed blind spots. Unknown tools or unsupported shell commands
+  downgrade a clean negative to `unverifiable`; observed violations remain
+  violations.
 
 ## Generic policy
 
@@ -58,6 +62,10 @@ rules:
     subject: this-agent
     never_run:
       - rm -rf
+
+  - id: no-external-egress
+    subject: any-agent-in-session
+    never_egress: external
 ```
 
 ```sh
@@ -82,9 +90,16 @@ Without a complete recursive manifest, absence is
 `unverifiable: delegate-coverage-incomplete`; observed violations still carry
 evidence. See [Subject Axis](./docs/SUBJECT-AXIS.md).
 
-Phase 0 accepts `never_egress` so policies do not need a later schema rewrite,
-but returns `unverifiable` until Phase 1 lands channel-complete egress
-detection. Path entries are exact normalized paths in this phase.
+`never_read` covers structured reads plus shell reads through `cat`, `sed`,
+`head`, `tail`, `grep`, input redirection, and file-backed `curl`/`wget`
+payloads. `never_egress` detects coarse external activity through shell network
+commands, network tools, and MCP calls. Domain/resource allowlists are not yet
+modeled; that belongs to the resource taxonomy phase.
+
+An unknown tool or unsupported shell command is never treated as harmless. If
+it could affect a channel needed to prove a clean negative, that claim returns
+`unverifiable: channel-coverage-incomplete` and the coverage receipt names the
+gap.
 
 ## Packages
 

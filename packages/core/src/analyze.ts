@@ -79,6 +79,7 @@ export function analyze(
   let compliance: Report['compliance'];
   let dossier: Report['dossier'];
   let hookRequests: Report['hookRequests'];
+  let verificationCoverage: Report['verificationCoverage'];
   if (mandate) {
     const result = runCompliance(
       mandate,
@@ -91,6 +92,7 @@ export function analyze(
     compliance = result.verdicts;
     dossier = result.dossier;
     hookRequests = result.hookRequests;
+    verificationCoverage = result.verificationCoverage;
     findings.push(...result.findings);
   }
 
@@ -114,5 +116,6 @@ export function analyze(
     ...(compliance ? { compliance } : {}),
     ...(dossier ? { dossier } : {}),
     ...(hookRequests ? { hookRequests } : {}),
+    ...(verificationCoverage ? { verificationCoverage } : {}),
   };
 }

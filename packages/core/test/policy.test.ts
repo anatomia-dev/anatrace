@@ -132,7 +132,7 @@ rules:
     expect(verdicts.every((verdict) => verdict.status === 'violated')).toBe(true);
   });
 
-  it('never_egress loads honestly but remains unverifiable until Phase 1', () => {
+  it('never_egress resolves satisfied when every observed channel is known-local', () => {
     const loaded = loadPolicyYaml(`
 version: 1
 rules:
@@ -174,7 +174,7 @@ rules:
       '',
       { thisAgent: { kind: 'root' } },
     )[0];
-    expect(verdict).toMatchObject({ status: 'unverifiable', reason: 'routed-to-llm' });
+    expect(verdict).toMatchObject({ status: 'satisfied', reason: 'predicate-matched' });
   });
 
   it('only_edit remains strict for a large out-of-policy spread', () => {

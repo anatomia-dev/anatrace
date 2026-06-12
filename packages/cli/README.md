@@ -27,5 +27,9 @@ anatrace session.jsonl \
 anatrace reports `unverifiable` when a signal, binding, or coverage guarantee
 is absent. It does not silently turn a blind channel into a pass.
 
+Pretty, JSON, and SARIF output include verification coverage. The receipt names
+unknown tools and unsupported shell commands that prevented a complete
+negative proof.
+
 See the [repository README](https://github.com/anatomia-dev/anatrace#readme) for
 policy syntax, formats, and current limitations.
