@@ -372,6 +372,133 @@ describe('Phase 2 lineage extraction', () => {
     ]);
   });
 
+  it('uses Codex session storage parent and child facts as observed lineage evidence', () => {
+    const fixture = byName('codex-subagent-storage');
+    const blobs = freshBlobs(fixture);
+    const session = parseSession(blobs, fixture.harness);
+    expect(session).not.toBeNull();
+    const lineage = extractLineage(session!, blobs);
+    expect(lineage.observedDelegates).toEqual([
+      { kind: 'subagent', subagentId: 'codex-child-storage' },
+    ]);
+    expect(lineage.checkedLanes).toEqual([{ kind: 'root' }]);
+    expect(lineage.completeness).toBe('observed-partial');
+    expect(lineage.gaps).toEqual([
+      expect.objectContaining({
+        reason: 'delegate-transcript-unreadable',
+        agent: { kind: 'subagent', subagentId: 'codex-child-storage' },
+        blobName: 'subagents/agent-codex-child-storage.jsonl',
+      }),
+    ]);
+  });
+
+  it('reports parent-only Codex storage evidence as a missing child transcript', () => {
+    const fixture = byName('codex-subagent-storage');
+    const blobs = [freshBlobs(fixture)[0]!];
+    const session = parseSession(blobs, fixture.harness);
+    expect(session).not.toBeNull();
+    const lineage = extractLineage(session!, blobs);
+    expect(lineage.observedDelegates).toEqual([
+      { kind: 'subagent', subagentId: 'codex-child-storage' },
+    ]);
+    expect(lineage.gaps).toEqual([
+      expect.objectContaining({
+        reason: 'delegate-call-without-child-transcript',
+        agent: { kind: 'subagent', subagentId: 'codex-child-storage' },
+        blobName: 'parent',
+      }),
+    ]);
+  });
+
+  it('does not match Codex child storage facts when the parent session id is missing', () => {
+    const blobs: NamedBlob[] = [
+      {
+        name: 'parent',
+        bytes: enc(jsonl([{ type: 'session_meta', payload: { cli_version: '0.139.0' } }])),
+      },
+      {
+        name: 'subagents/agent-unrelated.jsonl',
+        bytes: enc(jsonl([{ type: 'session_meta', payload: { id: 'unrelated' } }])),
+      },
+    ];
+    const session = parseSession(blobs, 'codex');
+    expect(session).not.toBeNull();
+    const lineage = extractLineage(session!, blobs);
+    expect(lineage.observedDelegates).toEqual([]);
+    expect(lineage.gaps).toEqual([]);
+  });
+
+  it('chooses Codex duplicate storage blob names deterministically', () => {
+    const parent = freshBlobs(byName('codex-subagent-storage'))[0]!;
+    const duplicateA: NamedBlob = {
+      name: 'subagents/agent-codex-child-storage-a.jsonl',
+      bytes: enc(jsonl([
+        {
+          type: 'session_meta',
+          payload: {
+            id: 'codex-child-storage',
+            parent_thread_id: 'codex-parent-storage',
+          },
+        },
+      ])),
+    };
+    const duplicateB: NamedBlob = {
+      name: 'subagents/agent-codex-child-storage-b.jsonl',
+      bytes: duplicateA.bytes,
+    };
+    const sessionA = parseSession([parent, duplicateA, duplicateB], 'codex');
+    const sessionB = parseSession([parent, duplicateB, duplicateA], 'codex');
+    expect(sessionA).not.toBeNull();
+    expect(sessionB).not.toBeNull();
+    expect(JSON.stringify(extractLineage(sessionA!, [parent, duplicateA, duplicateB]))).toBe(
+      JSON.stringify(extractLineage(sessionB!, [duplicateB, parent, duplicateA])),
+    );
+    expect(extractLineage(sessionA!, [parent, duplicateA, duplicateB]).gaps).toEqual([
+      expect.objectContaining({ blobName: 'subagents/agent-codex-child-storage-a.jsonl' }),
+    ]);
+  });
+
+  it('does not attribute nested Codex child spawns to the root session', () => {
+    const fixture = byName('codex-subagent-storage');
+    const blobs = [
+      freshBlobs(fixture)[0]!,
+      {
+        name: 'subagents/agent-codex-child-storage.jsonl',
+        bytes: enc(jsonl([
+          {
+            type: 'session_meta',
+            payload: {
+              id: 'codex-child-storage',
+              parent_thread_id: 'codex-parent-storage',
+            },
+          },
+          {
+            type: 'response_item',
+            payload: {
+              type: 'function_call',
+              name: 'spawn_agent',
+              call_id: 'call_nested',
+            },
+          },
+          {
+            type: 'response_item',
+            payload: {
+              type: 'function_call_output',
+              call_id: 'call_nested',
+              output: JSON.stringify({ agent_id: 'codex-grandchild-storage' }),
+            },
+          },
+        ])),
+      },
+    ];
+    const session = parseSession(blobs, fixture.harness);
+    expect(session).not.toBeNull();
+    const lineage = extractLineage(session!, blobs);
+    expect(lineage.observedDelegates).toEqual([
+      { kind: 'subagent', subagentId: 'codex-child-storage' },
+    ]);
+  });
+
   it('does not let a Codex AgentToolUse hook clear missing delegate lineage', () => {
     const blobs = [codexParentWithAgentTool()];
     const session = parseSession(blobs, 'codex');

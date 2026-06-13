@@ -211,6 +211,92 @@ function sidecarFacts(blobs: NamedBlob[]): {
   return { transcripts, metadata, transcriptDeclaredIds };
 }
 
+function jsonObjectText(text: string): Record<string, unknown> | null {
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function codexStorageFacts(blobs: NamedBlob[], parentSessionId: string): {
+  spawnedAgents: Map<string, string>;
+  childTranscripts: Map<string, string>;
+} {
+  const spawnedAgents = new Map<string, string>();
+  const childTranscripts = new Map<string, string>();
+  if (!parentSessionId) return { spawnedAgents, childTranscripts };
+  for (const blob of blobs.slice().sort((a, b) => a.name.localeCompare(b.name))) {
+    const lines = readJsonlLines(blob.bytes);
+    let blobSessionId = '';
+    const spawnCallIds = new Set<string>();
+    for (const line of lines) {
+      const type = stringField(line, 'type');
+      const rawPayload = line['payload'];
+      const payload = typeof rawPayload === 'object' && rawPayload !== null && !Array.isArray(rawPayload)
+        ? (rawPayload as Record<string, unknown>)
+        : undefined;
+      if (!payload) continue;
+      if (type === 'session_meta' && !blobSessionId) blobSessionId = stringField(payload, 'id');
+      if (
+        type === 'response_item'
+        && stringField(payload, 'type') === 'function_call'
+        && stringField(payload, 'name') === 'spawn_agent'
+      ) {
+        const callId = stringField(payload, 'call_id');
+        if (callId) spawnCallIds.add(callId);
+      }
+    }
+
+    for (const line of lines) {
+      const type = stringField(line, 'type');
+      const rawPayload = line['payload'];
+      const payload = typeof rawPayload === 'object' && rawPayload !== null && !Array.isArray(rawPayload)
+        ? (rawPayload as Record<string, unknown>)
+        : undefined;
+      if (!payload) continue;
+
+      if (
+        blobSessionId === parentSessionId
+        && type === 'response_item'
+        && stringField(payload, 'type') === 'function_call_output'
+        && spawnCallIds.has(stringField(payload, 'call_id'))
+      ) {
+        const output = jsonObjectText(stringField(payload, 'output'));
+        if (output) {
+          const agentId = stringField(output, 'agent_id');
+          if (agentId && !spawnedAgents.has(agentId)) spawnedAgents.set(agentId, blob.name);
+        }
+      }
+
+      if (type !== 'session_meta') continue;
+      const childId = stringField(payload, 'id');
+      const directParentId = stringField(payload, 'parent_thread_id');
+      const rawSource = payload['source'];
+      const source = typeof rawSource === 'object' && rawSource !== null && !Array.isArray(rawSource)
+        ? (rawSource as Record<string, unknown>)
+        : undefined;
+      const rawSubagent = source?.['subagent'];
+      const subagent = rawSubagent && typeof rawSubagent === 'object' && !Array.isArray(rawSubagent)
+        ? (rawSubagent as Record<string, unknown>)
+        : undefined;
+      const rawThreadSpawn = subagent?.['thread_spawn'];
+      const threadSpawn = rawThreadSpawn && typeof rawThreadSpawn === 'object' && !Array.isArray(rawThreadSpawn)
+        ? (rawThreadSpawn as Record<string, unknown>)
+        : undefined;
+      const spawnParentId = stringField(threadSpawn, 'parent_thread_id');
+      if (childId && (directParentId === parentSessionId || spawnParentId === parentSessionId)) {
+        if (!childTranscripts.has(childId)) childTranscripts.set(childId, blob.name);
+      }
+    }
+  }
+  return { spawnedAgents, childTranscripts };
+}
+
 function hookAgents(hooks: HarnessLineageHook[]): AgentRef[] {
   return hooks
     .filter((hook): hook is Extract<HarnessLineageHook, { agentId: string }> => 'agentId' in hook)
@@ -334,6 +420,7 @@ function claudeGaps(
 function codexGaps(
   fanoutCalls: LineageFanoutCall[],
   hooks: HarnessLineageHook[],
+  storage: ReturnType<typeof codexStorageFacts>,
   observedDelegates: AgentRef[],
   checkedLanes: AgentRef[],
 ): LineageGap[] {
@@ -348,11 +435,17 @@ function codexGaps(
     const stop = hooks.find(
       (hook) => hook.event === 'SubagentStop' && hook.agentId === delegate.subagentId,
     );
+    const transcriptBlob = storage.childTranscripts.get(delegate.subagentId);
+    const spawnBlob = storage.spawnedAgents.get(delegate.subagentId);
+    const blobName = transcriptBlob ?? spawnBlob;
     gaps.push({
-      reason: stop?.event === 'SubagentStop' && stop.agentTranscriptPath
+      reason: transcriptBlob || (stop?.event === 'SubagentStop' && stop.agentTranscriptPath)
         ? 'delegate-transcript-unreadable'
+        : spawnBlob
+          ? 'delegate-call-without-child-transcript'
         : 'codex-subagent-storage-unknown',
       agent: delegate,
+      ...(blobName ? { blobName } : {}),
       ...(stop ? { hookEvent: stop.event } : {}),
     });
   }
@@ -420,8 +513,11 @@ export function extractLineage(
     observedDelegates = uniqueAgents([...observedDelegates, ...sidecarAgents, ...hookAgents(relevantHooks)]);
     gaps = claudeGaps(fanoutCalls, facts, relevantHooks, checkedLanes);
   } else {
-    observedDelegates = uniqueAgents([...observedDelegates, ...hookAgents(relevantHooks)]);
-    gaps = codexGaps(fanoutCalls, relevantHooks, observedDelegates, checkedLanes);
+    const storage = codexStorageFacts(blobs, session.sessionId);
+    const storageAgents = [...storage.spawnedAgents.keys(), ...storage.childTranscripts.keys()]
+      .map((id) => ({ kind: 'subagent', subagentId: id }) as AgentRef);
+    observedDelegates = uniqueAgents([...observedDelegates, ...storageAgents, ...hookAgents(relevantHooks)]);
+    gaps = codexGaps(fanoutCalls, relevantHooks, storage, observedDelegates, checkedLanes);
   }
   gaps = normalizeGaps(gaps);
 
