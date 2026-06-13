@@ -49,6 +49,8 @@ export interface ToolEvent {
   type: 'tool';
   name: string;
   input?: unknown;
+  /** Harness tool-call id when the transcript exposes one. Used for lineage joins; never counted. */
+  toolUseId?: string;
 }
 /** isError = the structured friction vocabulary (Claude tool_result.is_error / Codex patch_apply_end.success===false). */
 export interface ToolResultEvent {

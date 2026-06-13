@@ -212,7 +212,13 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
             });
           } else {
             const toolName = FANOUT_TOOLS.has(name) ? 'Agent' : name;
-            events.push({ type: 'tool', name: toolName, ...(input ? { input } : {}), ...meta });
+            events.push({
+              type: 'tool',
+              name: toolName,
+              ...(input ? { input } : {}),
+              ...(blockId ? { toolUseId: blockId } : {}),
+              ...meta,
+            });
           }
         }
       }

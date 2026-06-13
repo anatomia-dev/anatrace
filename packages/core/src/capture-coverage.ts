@@ -1,4 +1,5 @@
 import type { AgentRef } from './session.js';
+import type { LineageExtraction } from './lineage.js';
 
 /**
  * A trusted launcher's complete declaration of the direct delegates spawned by one lane.
@@ -36,4 +37,5 @@ export interface MandateEvaluationContext {
   thisAgent?: AgentRef;
   roleBindings?: Record<string, AgentRef[]>;
   captureCoverage?: CaptureCoverage;
+  lineage?: LineageExtraction;
 }

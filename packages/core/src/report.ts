@@ -13,6 +13,7 @@ import type {
 } from './meta/facts.js';
 import type { GitOpsSummary } from './meta/git-ops.js';
 import type { VerificationCoverage } from './channels.js';
+import type { LineageExtraction } from './lineage.js';
 
 /**
  * The stable, versioned run-output envelope (REQ Item 10). Consumers script against it ⇒
@@ -68,4 +69,9 @@ export interface Report {
   hookRequests?: HookRequest[];
   /** Claim-keyed receipt for which behavioral channels were completely inspected. */
   verificationCoverage?: VerificationCoverage;
+  /**
+   * Delegation lineage and coverage gaps projected from transcripts, sidecars, and hook records.
+   * Optional for embedded callers; the CLI supplies it for every run as an additive v2 field.
+   */
+  lineage?: LineageExtraction;
 }

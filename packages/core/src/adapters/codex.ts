@@ -184,7 +184,13 @@ function parseCodex(group: NamedBlob[]): NormalizedSession | null {
         // prudence isn't `codex-blind` purely from a dropped payload. Degrade to absent on
         // a non-object/unparseable argument (never throw).
         const args = parseArgsObject(rStr(payload, 'arguments'));
-        events.push({ type: 'tool', name, ...(args ? { input: args } : {}), ...meta });
+        events.push({
+          type: 'tool',
+          name,
+          ...(args ? { input: args } : {}),
+          ...(callId ? { toolUseId: callId } : {}),
+          ...meta,
+        });
         return;
       }
       if (ptype === 'function_call_output' || ptype === 'custom_tool_call_output') {

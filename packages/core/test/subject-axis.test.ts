@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { CaptureCoverage, MandateEvaluationContext } from '../src/capture-coverage.js';
-import type { CheckableClaim } from '../src/mandate.js';
+import type { LineageExtraction } from '../src/lineage.js';
+import type { CheckableClaim, Mandate } from '../src/mandate.js';
 import type { AgentRef, NormalizedSession, SessionEvent } from '../src/session.js';
+import { analyze } from '../src/analyze.js';
 import { verdictForClaim } from '../src/verdict.js';
 
 const root: AgentRef = { kind: 'root' };
@@ -132,6 +134,109 @@ describe('ClaimSubject + trusted launcher coverage', () => {
       context,
     );
     expect(result).toMatchObject({ status: 'satisfied', reason: 'predicate-matched' });
+  });
+
+  it('does not prove a negative when lineage observes an undeclared delegate', () => {
+    const lineage: LineageExtraction = {
+      schemaVersion: 1,
+      harness: 'claude',
+      sessionId: 's',
+      completeness: 'observed-partial',
+      lanes: [root, delegate, { kind: 'subagent', subagentId: 'extra' }],
+      checkedLanes: [root, delegate],
+      observedDelegates: [delegate, { kind: 'subagent', subagentId: 'extra' }],
+      fanoutCalls: [],
+      hooks: [],
+      gaps: [
+        {
+          reason: 'delegate-call-without-child-transcript',
+          agent: { kind: 'subagent', subagentId: 'extra' },
+        },
+      ],
+    };
+    const result = verdictForClaim(
+      neverRead(includeDelegates),
+      session([]),
+      undefined,
+      undefined,
+      '',
+      { thisAgent: root, captureCoverage: completeCoverage(), lineage },
+    );
+    expect(result).toMatchObject({
+      status: 'unverifiable',
+      reason: 'delegate-coverage-incomplete',
+    });
+  });
+
+  it('does not prove a negative when lineage has unresolved delegate gaps', () => {
+    const lineage: LineageExtraction = {
+      schemaVersion: 1,
+      harness: 'claude',
+      sessionId: 's',
+      completeness: 'observed-partial',
+      lanes: [root, delegate],
+      checkedLanes: [root, delegate],
+      observedDelegates: [delegate],
+      fanoutCalls: [],
+      hooks: [],
+      gaps: [
+        {
+          reason: 'dispatch-link-mismatch',
+          agent: delegate,
+          toolUseId: 'toolu-other',
+        },
+      ],
+    };
+    const result = verdictForClaim(
+      neverRead(includeDelegates),
+      session([]),
+      undefined,
+      undefined,
+      '',
+      { thisAgent: root, captureCoverage: completeCoverage(), lineage },
+    );
+    expect(result).toMatchObject({
+      status: 'unverifiable',
+      reason: 'delegate-coverage-incomplete',
+    });
+  });
+
+  it('public analyze lineage parameter participates in compliance evaluation', () => {
+    const lineage: LineageExtraction = {
+      schemaVersion: 1,
+      harness: 'claude',
+      sessionId: 's',
+      completeness: 'observed-partial',
+      lanes: [root, delegate],
+      checkedLanes: [root],
+      observedDelegates: [delegate],
+      fanoutCalls: [],
+      hooks: [],
+      gaps: [
+        {
+          reason: 'delegate-call-without-child-transcript',
+          agent: delegate,
+        },
+      ],
+    };
+    const mandate: Mandate = {
+      schemaVersion: 1,
+      framework: 'test',
+      claims: [neverRead(includeDelegates)],
+    };
+    const report = analyze(
+      session([]),
+      undefined,
+      undefined,
+      mandate,
+      '',
+      { thisAgent: root, captureCoverage: completeCoverage() },
+      lineage,
+    );
+    expect(report.compliance?.[0]).toMatchObject({
+      status: 'unverifiable',
+      reason: 'delegate-coverage-incomplete',
+    });
   });
 
   it('stays unverifiable when a declared delegate was not captured', () => {

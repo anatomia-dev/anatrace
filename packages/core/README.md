@@ -54,8 +54,9 @@ const verdicts = verdictsForMandate(
 );
 ```
 
-Delegate-inclusive negative conclusions require launcher-supplied
-`CaptureCoverage`. Without a complete recursive manifest they return
+Delegate-inclusive negative conclusions require reconciled `CaptureCoverage`:
+observed lineage from transcripts/sidecars/hooks plus the caller's expected
+launch boundary. Without complete recursive coverage they return
 `unverifiable: delegate-coverage-incomplete`. Detected violations remain
 provable without completeness.
 

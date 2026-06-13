@@ -18,6 +18,10 @@ function skillsLabel(skills: SkillInvocation[]): string {
     .join(', ');
 }
 
+function agentLabel(agent: { kind: 'root' } | { kind: 'subagent'; subagentId: string }): string {
+  return agent.kind === 'root' ? 'root' : `subagent:${agent.subagentId}`;
+}
+
 /** JSON renderer: the stable `Report` envelope + render-only projections (cost; skills) — never `cost_usd`. */
 export function renderJson(report: Report, skills: SkillInvocation[] = []): string {
   return JSON.stringify({ ...report, cost_estimate: costProjection(report), skills }, null, 2);
@@ -38,6 +42,20 @@ export function renderPretty(report: Report, skills: SkillInvocation[] = []): st
     `  turns ${session.counts.turns} · tool_calls ${session.counts.tool_calls} · commands ${session.counts.commands_run} · files ${session.counts.files_touched}`,
   );
   if (skills.length) lines.push(`  skills: ${skillsLabel(skills)}`);
+  if (report.lineage) {
+    const lineage = report.lineage;
+    const delegatesChecked = lineage.checkedLanes.filter((agent) => agent.kind === 'subagent');
+    const delegatesObserved = lineage.observedDelegates.length;
+    const delegateLabel = delegatesChecked.length === 0
+      ? 'no delegate lanes'
+      : delegatesChecked.map(agentLabel).join(', ');
+    lines.push(
+      `  lineage: checked root + ${delegatesChecked.length} delegate lanes (${delegateLabel}); observed ${delegatesObserved} delegates; ${lineage.gaps.length} gaps; ${lineage.completeness}`,
+    );
+    for (const gap of lineage.gaps) {
+      lines.push(`    lineage gap: ${gap.reason}${gap.agent ? `:${agentLabel(gap.agent)}` : ''}`);
+    }
+  }
   if (report.verificationCoverage) {
     const coverage = report.verificationCoverage;
     lines.push(

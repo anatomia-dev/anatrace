@@ -37,9 +37,21 @@ Roles are never inferred from transcript prose, filenames, people, or
 harness-specific labels. A missing or ambiguous binding produces
 `unverifiable: subject-unresolvable`.
 
-## Capture Coverage
+## Delegation Lineage And Capture Coverage
 
-Delegate completeness comes from the trusted launcher, not sidecar discovery.
+Delegate completeness is a coverage-scoped absence question, not a sidecar
+discovery question. anatrace separates three inputs:
+
+1. **Observed lineage** — what transcripts, sidecars, and captured harness hooks
+   prove was spawned or captured.
+2. **Expected launch boundary** — what a launcher says it intended to start and
+   capture.
+3. **Coverage completeness** — the reconciled statement that every expected lane
+   and every observed lane is represented and captured.
+
+Claude and Codex hook records can identify observed delegates, but hook records
+alone do not prove absence. Sidecars alone also do not prove absence. They tell
+anatrace which delegate lanes it can inspect and which gaps remain.
 
 ```ts
 interface CaptureCoverage {
@@ -56,6 +68,13 @@ interface LaneCaptureCoverage {
 }
 ```
 
+`CaptureCoverage` is the reconciled verdict input. A caller should pass complete
+coverage only after observed lineage and expected launch records agree. When a
+caller has only observed lineage, anatrace still checks delegate lanes whose
+transcript bytes were captured and parsed, and reports closed lineage gaps for
+observed-but-unchecked delegates. Delegate-inclusive negatives remain
+unverifiable.
+
 For a delegate-inclusive subject, an absent action is provable only when:
 
 1. Every visited lane has a complete direct-delegate manifest.
@@ -63,6 +82,7 @@ For a delegate-inclusive subject, an absent action is provable only when:
 3. Every declared delegate is marked captured.
 4. The recursive manifest is acyclic.
 5. Every observed root-session lane is represented by that manifest.
+6. Observed harness lineage does not contradict the expected launch boundary.
 
 Otherwise an absence produces
 `unverifiable: delegate-coverage-incomplete`.
