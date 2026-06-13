@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { CaptureCoverage, MandateEvaluationContext } from '../src/capture-coverage.js';
+import {
+  coverageFromExpectedLaunchBoundary,
+  type CaptureCoverage,
+  type ExpectedLaunchBoundary,
+  type MandateEvaluationContext,
+} from '../src/capture-coverage.js';
 import type { LineageExtraction } from '../src/lineage.js';
 import type { CheckableClaim, Mandate } from '../src/mandate.js';
 import type { AgentRef, NormalizedSession, SessionEvent } from '../src/session.js';
@@ -134,6 +139,150 @@ describe('ClaimSubject + trusted launcher coverage', () => {
       context,
     );
     expect(result).toMatchObject({ status: 'satisfied', reason: 'predicate-matched' });
+  });
+
+  it('reconciles expected launch records with checked lineage into complete coverage', () => {
+    const expected: ExpectedLaunchBoundary = {
+      source: 'trusted-launcher',
+      lanes: [
+        { agent: root, expectedDelegates: [delegate] },
+        { agent: delegate, expectedDelegates: [] },
+      ],
+    };
+    const lineage: LineageExtraction = {
+      schemaVersion: 1,
+      harness: 'codex',
+      sessionId: 's',
+      completeness: 'observed-complete-by-harness',
+      lanes: [root, delegate],
+      checkedLanes: [root, delegate],
+      observedDelegates: [delegate],
+      fanoutCalls: [],
+      hooks: [],
+      gaps: [],
+    };
+    const result = verdictForClaim(
+      neverRead(includeDelegates),
+      session([]),
+      undefined,
+      undefined,
+      '',
+      {
+        thisAgent: root,
+        captureCoverage: coverageFromExpectedLaunchBoundary(expected, lineage),
+        lineage,
+      },
+    );
+    expect(result).toMatchObject({ status: 'satisfied', reason: 'predicate-matched' });
+  });
+
+  it('keeps expected launch coverage incomplete when reconciliation lineage has gaps', () => {
+    const expected: ExpectedLaunchBoundary = {
+      source: 'trusted-launcher',
+      lanes: [
+        { agent: root, expectedDelegates: [delegate] },
+        { agent: delegate, expectedDelegates: [] },
+      ],
+    };
+    const lineage: LineageExtraction = {
+      schemaVersion: 1,
+      harness: 'codex',
+      sessionId: 's',
+      completeness: 'observed-partial',
+      lanes: [root, delegate],
+      checkedLanes: [root, delegate],
+      observedDelegates: [delegate],
+      fanoutCalls: [],
+      hooks: [],
+      gaps: [
+        {
+          reason: 'dispatch-link-mismatch',
+          agent: delegate,
+          toolUseId: 'toolu-other',
+        },
+      ],
+    };
+    const result = verdictForClaim(
+      neverRead(includeDelegates),
+      session([]),
+      undefined,
+      undefined,
+      '',
+      {
+        thisAgent: root,
+        captureCoverage: coverageFromExpectedLaunchBoundary(expected, lineage),
+      },
+    );
+    expect(result).toMatchObject({
+      status: 'unverifiable',
+      reason: 'delegate-coverage-incomplete',
+    });
+  });
+
+  it('still proves delegate violations when expected launch reconciliation is incomplete', () => {
+    const expected: ExpectedLaunchBoundary = {
+      source: 'trusted-launcher',
+      lanes: [
+        { agent: root, expectedDelegates: [delegate] },
+        { agent: delegate, expectedDelegates: [] },
+      ],
+    };
+    const lineage: LineageExtraction = {
+      schemaVersion: 1,
+      harness: 'codex',
+      sessionId: 's',
+      completeness: 'observed-partial',
+      lanes: [root, delegate],
+      checkedLanes: [root, delegate],
+      observedDelegates: [delegate],
+      fanoutCalls: [],
+      hooks: [],
+      gaps: [
+        {
+          reason: 'dispatch-link-mismatch',
+          agent: delegate,
+          toolUseId: 'toolu-other',
+        },
+      ],
+    };
+    const result = verdictForClaim(
+      neverRead(includeDelegates),
+      session([readEvent(delegate, '/repo/secret.txt', 4)]),
+      undefined,
+      undefined,
+      '',
+      {
+        thisAgent: root,
+        captureCoverage: coverageFromExpectedLaunchBoundary(expected, lineage),
+      },
+    );
+    expect(result).toMatchObject({ status: 'violated', reason: 'predicate-not-matched' });
+    expect(result.evidence[0]?.agent).toEqual(delegate);
+  });
+
+  it('does not let expected launch records alone prove capture', () => {
+    const expected: ExpectedLaunchBoundary = {
+      source: 'trusted-launcher',
+      lanes: [
+        { agent: root, expectedDelegates: [delegate] },
+        { agent: delegate, expectedDelegates: [] },
+      ],
+    };
+    const result = verdictForClaim(
+      neverRead(includeDelegates),
+      session([]),
+      undefined,
+      undefined,
+      '',
+      {
+        thisAgent: root,
+        captureCoverage: coverageFromExpectedLaunchBoundary(expected),
+      },
+    );
+    expect(result).toMatchObject({
+      status: 'unverifiable',
+      reason: 'delegate-coverage-incomplete',
+    });
   });
 
   it('does not prove a negative when lineage observes an undeclared delegate', () => {

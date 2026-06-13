@@ -16,13 +16,19 @@ anatrace session.jsonl \
   --json
 ```
 
-For delegate-inclusive negative proof, supply trusted launcher coverage:
+For delegate-inclusive negative proof, supply trusted launcher coverage or raw
+expected launch records:
 
 ```sh
 anatrace session.jsonl \
+  --lineage-hooks hooks.jsonl \
   --capture-manifest capture.json \
   --json
 ```
+
+Expected launch records use `kind: "expected-launch-boundary"` and are
+reconciled with observed checked lineage before verdict evaluation. Expected
+records alone never prove capture.
 
 anatrace reports `unverifiable` when a signal, binding, or coverage guarantee
 is absent. It does not silently turn a blind channel into a pass.

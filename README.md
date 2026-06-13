@@ -101,14 +101,36 @@ anatrace session.jsonl \
   --lineage-hooks hooks.jsonl
 ```
 
-A trusted launcher can also supply reconciled capture coverage:
+A trusted launcher can also supply expected launch records. The CLI reconciles
+them with observed checked lineage before verdict evaluation:
 
 ```sh
 anatrace session.jsonl \
   --policy .anatrace.yaml \
+  --lineage-hooks hooks.jsonl \
   --capture-manifest capture.json \
   --json
 ```
+
+```json
+{
+  "kind": "expected-launch-boundary",
+  "source": "trusted-launcher",
+  "lanes": [
+    {
+      "agent": { "kind": "root" },
+      "expectedDelegates": [{ "kind": "subagent", "subagentId": "reviewer" }]
+    },
+    {
+      "agent": { "kind": "subagent", "subagentId": "reviewer" },
+      "expectedDelegates": []
+    }
+  ]
+}
+```
+
+Expected launch records are intent, not proof of capture. A lane is marked
+captured only when observed lineage shows its transcript bytes were checked.
 
 Without complete recursive capture coverage, absence produces an
 `unverifiable` verdict with reason `delegate-coverage-incomplete`; observed root

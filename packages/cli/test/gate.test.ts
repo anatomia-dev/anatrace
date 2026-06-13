@@ -296,6 +296,108 @@ rules:
     });
   });
 
+  it('expected launch boundary satisfies absence only after CLI lineage reconciliation', () => {
+    const dir = tmpDir();
+    const session = claudeCleanSession(dir);
+    const policy = path.join(dir, 'policy.yaml');
+    const manifest = path.join(dir, 'capture.json');
+    fs.writeFileSync(
+      policy,
+      `version: 1
+rules:
+  - id: no-secret
+    subject: this-agent-and-all-delegates
+    never_read: secret.txt
+`,
+    );
+    fs.writeFileSync(
+      manifest,
+      JSON.stringify({
+        kind: 'expected-launch-boundary',
+        source: 'trusted-launcher',
+        lanes: [{ agent: { kind: 'root' }, expectedDelegates: [] }],
+      }),
+    );
+    const r = run(
+      [session, '--policy', policy, '--capture-manifest', manifest, '--json'],
+      dir,
+    );
+    const report = JSON.parse(r.stdout) as {
+      compliance: Array<{ status: string; reason: string }>;
+    };
+    expect(report.compliance[0]).toMatchObject({
+      status: 'satisfied',
+      reason: 'predicate-matched',
+    });
+  });
+
+  it('expected launch boundary remains incomplete when hooks observe an unchecked delegate', () => {
+    const dir = tmpDir();
+    const session = claudeCleanSession(dir);
+    const policy = path.join(dir, 'policy.yaml');
+    const manifest = path.join(dir, 'capture.json');
+    const hooks = path.join(dir, 'hooks.jsonl');
+    fs.writeFileSync(
+      policy,
+      `version: 1
+rules:
+  - id: no-secret
+    subject: this-agent-and-all-delegates
+    never_read: secret.txt
+`,
+    );
+    fs.writeFileSync(
+      hooks,
+      enc([
+        {
+          hook_event_name: 'SubagentStart',
+          session_id: 's',
+          transcript_path: session,
+          model: 'claude-sonnet-4-6',
+          agent_id: 'agent-a',
+          agent_type: 'Explore',
+        },
+      ]),
+    );
+    fs.writeFileSync(
+      manifest,
+      JSON.stringify({
+        kind: 'expected-launch-boundary',
+        source: 'trusted-launcher',
+        lanes: [
+          {
+            agent: { kind: 'root' },
+            expectedDelegates: [{ kind: 'subagent', subagentId: 'agent-a' }],
+          },
+          {
+            agent: { kind: 'subagent', subagentId: 'agent-a' },
+            expectedDelegates: [],
+          },
+        ],
+      }),
+    );
+    const r = run(
+      [
+        session,
+        '--policy',
+        policy,
+        '--lineage-hooks',
+        hooks,
+        '--capture-manifest',
+        manifest,
+        '--json',
+      ],
+      dir,
+    );
+    const report = JSON.parse(r.stdout) as {
+      compliance: Array<{ status: string; reason: string }>;
+    };
+    expect(report.compliance[0]).toMatchObject({
+      status: 'unverifiable',
+      reason: 'delegate-coverage-incomplete',
+    });
+  });
+
   it('pretty output states coverage and the closed unverifiable reason', () => {
     const dir = tmpDir();
     const session = claudeCleanSession(dir);

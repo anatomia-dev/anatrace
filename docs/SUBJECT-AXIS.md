@@ -56,6 +56,7 @@ anatrace which delegate lanes it can inspect and which gaps remain.
 ```ts
 interface CaptureCoverage {
   source: 'trusted-launcher';
+  completeness?: 'complete' | 'incomplete';
   lanes: LaneCaptureCoverage[];
 }
 
@@ -66,6 +67,16 @@ interface LaneCaptureCoverage {
     | { status: 'complete'; delegates: AgentRef[] }
     | { status: 'unavailable' };
 }
+
+interface ExpectedLaunchBoundary {
+  source: 'trusted-launcher';
+  lanes: ExpectedLaunchLane[];
+}
+
+interface ExpectedLaunchLane {
+  agent: AgentRef;
+  expectedDelegates: AgentRef[];
+}
 ```
 
 `CaptureCoverage` is the reconciled verdict input. A caller should pass complete
@@ -74,6 +85,14 @@ caller has only observed lineage, anatrace still checks delegate lanes whose
 transcript bytes were captured and parsed, and reports closed lineage gaps for
 observed-but-unchecked delegates. Delegate-inclusive negatives remain
 unverifiable.
+
+The CLI also accepts raw expected launch records using
+`kind: 'expected-launch-boundary'` in the `--capture-manifest` JSON. This record
+is launcher intent only. The CLI converts it into `CaptureCoverage` by marking a
+lane captured only when the extracted lineage lists that lane in `checkedLanes`.
+The generated coverage is marked `incomplete` if the reconciliation lineage is
+partial or has gaps, so expected records cannot prove a clean negative by
+themselves. Without observed lineage, every expected lane remains uncaptured.
 
 For a delegate-inclusive subject, an absent action is provable only when:
 

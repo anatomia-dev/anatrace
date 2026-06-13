@@ -60,6 +60,13 @@ launch boundary. Without complete recursive coverage they return
 `unverifiable: delegate-coverage-incomplete`. Detected violations remain
 provable without completeness.
 
+Callers that have raw launcher intent can use
+`coverageFromExpectedLaunchBoundary(boundary, lineage)` to produce deterministic
+coverage. Expected records alone do not prove capture; a lane is marked captured
+only when the supplied lineage says its transcript bytes were checked. The
+generated coverage is itself marked incomplete when reconciliation lineage is
+partial or has gaps.
+
 `never_read` covers structured reads and recognized shell readers.
 `never_egress` covers shell network commands, network tools, and MCP calls.
 Unknown tools and unsupported commands produce

@@ -139,7 +139,7 @@ program
         ...(opts.role ? { roleBindings: { [opts.role]: [{ kind: 'root' }] } } : {}),
       };
       if (opts.captureManifest) {
-        const coverage = resolveCaptureCoverage(opts.captureManifest);
+        const coverage = resolveCaptureCoverage(opts.captureManifest, lineage);
         if (!coverage.ok) {
           process.stderr.write(coverage.message + '\n');
           process.exit(EXIT_USAGE);

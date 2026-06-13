@@ -26,7 +26,23 @@ export interface LaneCaptureCoverage {
  */
 export interface CaptureCoverage {
   source: 'trusted-launcher';
+  completeness?: 'complete' | 'incomplete';
   lanes: LaneCaptureCoverage[];
+}
+
+/**
+ * Raw launcher intent: the direct delegate graph the launcher intended to start and capture.
+ * This is not itself proof of capture. It becomes verdict input only after reconciliation
+ * with observed lineage, which marks lanes captured iff their transcript bytes were checked.
+ */
+export interface ExpectedLaunchLane {
+  agent: AgentRef;
+  expectedDelegates: AgentRef[];
+}
+
+export interface ExpectedLaunchBoundary {
+  source: 'trusted-launcher';
+  lanes: ExpectedLaunchLane[];
 }
 
 /**
@@ -38,4 +54,52 @@ export interface MandateEvaluationContext {
   roleBindings?: Record<string, AgentRef[]>;
   captureCoverage?: CaptureCoverage;
   lineage?: LineageExtraction;
+}
+
+function agentKey(agent: AgentRef): string {
+  return agent.kind === 'root' ? 'root' : `subagent:${agent.subagentId}`;
+}
+
+function uniqueAgents(agents: AgentRef[]): AgentRef[] {
+  const seen = new Set<string>();
+  const out: AgentRef[] = [];
+  for (const agent of agents) {
+    const key = agentKey(agent);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(agent);
+  }
+  return out.sort((a, b) => agentKey(a).localeCompare(agentKey(b)));
+}
+
+/**
+ * Reconcile raw launcher intent with observed checked lanes. Pure: no filesystem, clock,
+ * process, network, or inference from prose. Expected launch records alone never prove
+ * capture; absent lineage therefore yields uncaptured lanes.
+ */
+export function coverageFromExpectedLaunchBoundary(
+  boundary: ExpectedLaunchBoundary,
+  lineage?: LineageExtraction,
+): CaptureCoverage {
+  const checked = new Set((lineage?.checkedLanes ?? []).map(agentKey));
+  const complete =
+    lineage !== undefined &&
+    lineage.completeness !== 'observed-partial' &&
+    lineage.gaps.length === 0;
+  const lanes = boundary.lanes
+    .slice()
+    .sort((a, b) => agentKey(a.agent).localeCompare(agentKey(b.agent)))
+    .map((lane): LaneCaptureCoverage => ({
+      agent: lane.agent,
+      captured: checked.has(agentKey(lane.agent)),
+      delegateManifest: {
+        status: 'complete',
+        delegates: uniqueAgents(lane.expectedDelegates),
+      },
+    }));
+  return {
+    source: 'trusted-launcher',
+    completeness: complete ? 'complete' : 'incomplete',
+    lanes,
+  };
 }

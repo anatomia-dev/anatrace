@@ -152,7 +152,7 @@ function expandDelegates(
   const out: AgentRef[] = [];
   const resolved = new Set<string>();
   const visiting = new Set<string>();
-  let complete = !duplicateLane;
+  let complete = !duplicateLane && coverage.completeness !== 'incomplete';
 
   const visit = (agent: AgentRef): void => {
     const key = agentKey(agent);
