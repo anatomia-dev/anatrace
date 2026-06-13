@@ -223,6 +223,39 @@ function jsonObjectText(text: string): Record<string, unknown> | null {
   }
 }
 
+function codexThreadParentIds(payload: Record<string, unknown>): string[] {
+  const parentIds = new Set<string>();
+  const directParentId = stringField(payload, 'parent_thread_id');
+  const rawSource = payload['source'];
+  const source = typeof rawSource === 'object' && rawSource !== null && !Array.isArray(rawSource)
+    ? (rawSource as Record<string, unknown>)
+    : undefined;
+  const rawSubagent = source?.['subagent'];
+  const subagent = rawSubagent && typeof rawSubagent === 'object' && !Array.isArray(rawSubagent)
+    ? (rawSubagent as Record<string, unknown>)
+    : undefined;
+  const rawThreadSpawn = subagent?.['thread_spawn'];
+  const threadSpawn = rawThreadSpawn && typeof rawThreadSpawn === 'object' && !Array.isArray(rawThreadSpawn)
+    ? (rawThreadSpawn as Record<string, unknown>)
+    : undefined;
+  const spawnParentId = stringField(threadSpawn, 'parent_thread_id');
+  if (directParentId) parentIds.add(directParentId);
+  if (spawnParentId) parentIds.add(spawnParentId);
+  return [...parentIds].sort();
+}
+
+function isCodexSpawnToolCall(payload: Record<string, unknown>): boolean {
+  return (
+    (stringField(payload, 'type') === 'function_call' || stringField(payload, 'type') === 'custom_tool_call')
+    && stringField(payload, 'name') === 'spawn_agent'
+  );
+}
+
+function isCodexToolCallOutput(payload: Record<string, unknown>): boolean {
+  return stringField(payload, 'type') === 'function_call_output'
+    || stringField(payload, 'type') === 'custom_tool_call_output';
+}
+
 function codexStorageFacts(blobs: NamedBlob[], parentSessionId: string): {
   spawnedAgents: Map<string, string>;
   childTranscripts: Map<string, string>;
@@ -230,9 +263,10 @@ function codexStorageFacts(blobs: NamedBlob[], parentSessionId: string): {
   const spawnedAgents = new Map<string, string>();
   const childTranscripts = new Map<string, string>();
   if (!parentSessionId) return { spawnedAgents, childTranscripts };
-  for (const blob of blobs.slice().sort((a, b) => a.name.localeCompare(b.name))) {
+  const facts = blobs.slice().sort((a, b) => a.name.localeCompare(b.name)).map((blob) => {
     const lines = readJsonlLines(blob.bytes);
     let blobSessionId = '';
+    const parentIds = new Set<string>();
     const spawnCallIds = new Set<string>();
     for (const line of lines) {
       const type = stringField(line, 'type');
@@ -241,17 +275,16 @@ function codexStorageFacts(blobs: NamedBlob[], parentSessionId: string): {
         ? (rawPayload as Record<string, unknown>)
         : undefined;
       if (!payload) continue;
-      if (type === 'session_meta' && !blobSessionId) blobSessionId = stringField(payload, 'id');
-      if (
-        type === 'response_item'
-        && stringField(payload, 'type') === 'function_call'
-        && stringField(payload, 'name') === 'spawn_agent'
-      ) {
+      if (type === 'session_meta') {
+        if (!blobSessionId) blobSessionId = stringField(payload, 'id');
+        for (const parentId of codexThreadParentIds(payload)) parentIds.add(parentId);
+      }
+      if (type === 'response_item' && isCodexSpawnToolCall(payload)) {
         const callId = stringField(payload, 'call_id');
         if (callId) spawnCallIds.add(callId);
       }
     }
-
+    const spawned: string[] = [];
     for (const line of lines) {
       const type = stringField(line, 'type');
       const rawPayload = line['payload'];
@@ -259,39 +292,55 @@ function codexStorageFacts(blobs: NamedBlob[], parentSessionId: string): {
         ? (rawPayload as Record<string, unknown>)
         : undefined;
       if (!payload) continue;
-
       if (
-        blobSessionId === parentSessionId
-        && type === 'response_item'
-        && stringField(payload, 'type') === 'function_call_output'
+        type === 'response_item'
+        && isCodexToolCallOutput(payload)
         && spawnCallIds.has(stringField(payload, 'call_id'))
       ) {
         const output = jsonObjectText(stringField(payload, 'output'));
         if (output) {
           const agentId = stringField(output, 'agent_id');
-          if (agentId && !spawnedAgents.has(agentId)) spawnedAgents.set(agentId, blob.name);
+          if (agentId && !spawned.includes(agentId)) spawned.push(agentId);
         }
       }
+    }
+    return { blobName: blob.name, sessionId: blobSessionId, parentIds: [...parentIds].sort(), spawned };
+  });
 
-      if (type !== 'session_meta') continue;
-      const childId = stringField(payload, 'id');
-      const directParentId = stringField(payload, 'parent_thread_id');
-      const rawSource = payload['source'];
-      const source = typeof rawSource === 'object' && rawSource !== null && !Array.isArray(rawSource)
-        ? (rawSource as Record<string, unknown>)
-        : undefined;
-      const rawSubagent = source?.['subagent'];
-      const subagent = rawSubagent && typeof rawSubagent === 'object' && !Array.isArray(rawSubagent)
-        ? (rawSubagent as Record<string, unknown>)
-        : undefined;
-      const rawThreadSpawn = subagent?.['thread_spawn'];
-      const threadSpawn = rawThreadSpawn && typeof rawThreadSpawn === 'object' && !Array.isArray(rawThreadSpawn)
-        ? (rawThreadSpawn as Record<string, unknown>)
-        : undefined;
-      const spawnParentId = stringField(threadSpawn, 'parent_thread_id');
-      if (childId && (directParentId === parentSessionId || spawnParentId === parentSessionId)) {
-        if (!childTranscripts.has(childId)) childTranscripts.set(childId, blob.name);
+  const reachableSessionIds = new Set<string>([parentSessionId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const fact of facts) {
+      if (fact.parentIds.some((parentId) => reachableSessionIds.has(parentId))) {
+        if (fact.sessionId && !reachableSessionIds.has(fact.sessionId)) {
+          reachableSessionIds.add(fact.sessionId);
+          changed = true;
+        }
+        for (const agentId of fact.spawned) {
+          if (!reachableSessionIds.has(agentId)) {
+            reachableSessionIds.add(agentId);
+            changed = true;
+          }
+        }
       }
+      if (fact.sessionId && reachableSessionIds.has(fact.sessionId)) {
+        for (const agentId of fact.spawned) {
+          if (!reachableSessionIds.has(agentId)) {
+            reachableSessionIds.add(agentId);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+  for (const fact of facts) {
+    if (fact.sessionId && fact.sessionId !== parentSessionId && fact.parentIds.some((parentId) => reachableSessionIds.has(parentId))) {
+      if (!childTranscripts.has(fact.sessionId)) childTranscripts.set(fact.sessionId, fact.blobName);
+    }
+    if (!fact.sessionId || !reachableSessionIds.has(fact.sessionId)) continue;
+    for (const agentId of fact.spawned) {
+      if (!spawnedAgents.has(agentId)) spawnedAgents.set(agentId, fact.blobName);
     }
   }
   return { spawnedAgents, childTranscripts };
