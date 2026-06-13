@@ -12,9 +12,10 @@ within it. Across both harnesses, entirely on your machine.
 - **Local** — no network, no upload. Your transcripts never leave your machine.
 - **Cross-harness** — one model over Claude *and* Codex.
 
-> **Status: v0.1 release candidate.** The cross-harness engine, generic policy
-> loader, deterministic verdict layer, fail-loud channel coverage, and coarse
-> egress detection have landed. Public APIs remain pre-1.0 and may evolve.
+> **Status: v0.2.** The cross-harness engine, generic policy loader,
+> deterministic verdict layer, fail-loud channel coverage, coarse egress
+> detection, and Phase 2 delegation lineage have landed. Public APIs remain
+> pre-1.0 and may evolve.
 
 ## Install
 
