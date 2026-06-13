@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CLI_ROOT = path.join(here, '..');
+const WORKSPACE_ROOT = path.join(CLI_ROOT, '..', '..');
 const BIN = path.join(CLI_ROOT, 'dist', 'index.mjs');
 const CORE_FIX = path.join(CLI_ROOT, '..', 'core', 'test', 'fixtures');
 const ANATOMIA_SRC = path.join(CORE_FIX, 'framework-src', 'anatomia');
@@ -24,7 +25,7 @@ const CODEX_CORPUS = path.join(CORE_FIX, 'corpus', 'codex-cacheheavy', 'parent.j
 
 beforeAll(() => {
   // Rebuild so the spawned dist reflects the current src (no stale-dist false pass).
-  execFileSync('pnpm', ['run', 'build'], { cwd: CLI_ROOT, stdio: 'ignore' });
+  execFileSync('pnpm', ['run', 'build'], { cwd: WORKSPACE_ROOT, stdio: 'ignore' });
 }, 120_000);
 
 let tmp: string;
@@ -116,6 +117,36 @@ describe('D-CONFIG — the CI gate exit codes (spawned binary)', () => {
     const session = claudeCleanSession(dir);
     const r = run([session, '--json', '--format', 'sarif'], dir);
     expect(r.code).toBe(2);
+  });
+
+  it('pretty output reports lineage gaps from hook capture records', () => {
+    const dir = tmpDir();
+    const session = claudeCleanSession(dir);
+    const hooks = path.join(dir, 'hooks.jsonl');
+    fs.writeFileSync(hooks, enc([
+      {
+        hook_event_name: 'SubagentStart',
+        session_id: 's',
+        transcript_path: session,
+        model: 'claude-sonnet-4-6',
+        agent_id: 'agent-a',
+        agent_type: 'Explore',
+      },
+      {
+        hook_event_name: 'SubagentStop',
+        session_id: 's',
+        transcript_path: session,
+        model: 'claude-sonnet-4-6',
+        agent_id: 'agent-a',
+        agent_type: 'Explore',
+      },
+    ]));
+    const r = run([session, '--lineage-hooks', hooks], dir);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('lineage: checked root + 0 delegate lanes');
+    expect(r.stdout).toContain('observed 1 delegates');
+    expect(r.stdout).toContain('observed-partial');
+    expect(r.stdout).toContain('lineage gap: delegate-call-without-child-transcript:subagent:agent-a');
   });
 });
 
@@ -262,6 +293,108 @@ rules:
     expect(report.compliance[0]).toMatchObject({
       status: 'satisfied',
       reason: 'predicate-matched',
+    });
+  });
+
+  it('expected launch boundary satisfies absence only after CLI lineage reconciliation', () => {
+    const dir = tmpDir();
+    const session = claudeCleanSession(dir);
+    const policy = path.join(dir, 'policy.yaml');
+    const manifest = path.join(dir, 'capture.json');
+    fs.writeFileSync(
+      policy,
+      `version: 1
+rules:
+  - id: no-secret
+    subject: this-agent-and-all-delegates
+    never_read: secret.txt
+`,
+    );
+    fs.writeFileSync(
+      manifest,
+      JSON.stringify({
+        kind: 'expected-launch-boundary',
+        source: 'trusted-launcher',
+        lanes: [{ agent: { kind: 'root' }, expectedDelegates: [] }],
+      }),
+    );
+    const r = run(
+      [session, '--policy', policy, '--capture-manifest', manifest, '--json'],
+      dir,
+    );
+    const report = JSON.parse(r.stdout) as {
+      compliance: Array<{ status: string; reason: string }>;
+    };
+    expect(report.compliance[0]).toMatchObject({
+      status: 'satisfied',
+      reason: 'predicate-matched',
+    });
+  });
+
+  it('expected launch boundary remains incomplete when hooks observe an unchecked delegate', () => {
+    const dir = tmpDir();
+    const session = claudeCleanSession(dir);
+    const policy = path.join(dir, 'policy.yaml');
+    const manifest = path.join(dir, 'capture.json');
+    const hooks = path.join(dir, 'hooks.jsonl');
+    fs.writeFileSync(
+      policy,
+      `version: 1
+rules:
+  - id: no-secret
+    subject: this-agent-and-all-delegates
+    never_read: secret.txt
+`,
+    );
+    fs.writeFileSync(
+      hooks,
+      enc([
+        {
+          hook_event_name: 'SubagentStart',
+          session_id: 's',
+          transcript_path: session,
+          model: 'claude-sonnet-4-6',
+          agent_id: 'agent-a',
+          agent_type: 'Explore',
+        },
+      ]),
+    );
+    fs.writeFileSync(
+      manifest,
+      JSON.stringify({
+        kind: 'expected-launch-boundary',
+        source: 'trusted-launcher',
+        lanes: [
+          {
+            agent: { kind: 'root' },
+            expectedDelegates: [{ kind: 'subagent', subagentId: 'agent-a' }],
+          },
+          {
+            agent: { kind: 'subagent', subagentId: 'agent-a' },
+            expectedDelegates: [],
+          },
+        ],
+      }),
+    );
+    const r = run(
+      [
+        session,
+        '--policy',
+        policy,
+        '--lineage-hooks',
+        hooks,
+        '--capture-manifest',
+        manifest,
+        '--json',
+      ],
+      dir,
+    );
+    const report = JSON.parse(r.stdout) as {
+      compliance: Array<{ status: string; reason: string }>;
+    };
+    expect(report.compliance[0]).toMatchObject({
+      status: 'unverifiable',
+      reason: 'delegate-coverage-incomplete',
     });
   });
 

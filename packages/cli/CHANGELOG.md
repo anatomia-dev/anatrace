@@ -1,5 +1,22 @@
 # anatrace
 
+## 0.2.0
+
+### Minor Changes
+
+- Add Phase 2 delegation lineage and coverage-scoped absence.
+
+  - Add `--lineage-hooks` for Claude/Codex subagent lifecycle hook capture.
+  - Report checked root/delegate lanes and closed lineage gaps in CLI output.
+  - Accept raw trusted launcher `expected-launch-boundary` manifests through `--capture-manifest`.
+  - Reconcile expected launcher intent with observed checked lineage before verdict evaluation.
+  - Fail loud on malformed or ambiguous capture manifest identities and unknown manifest kinds.
+
+### Patch Changes
+
+- Updated dependencies
+  - anatrace-core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

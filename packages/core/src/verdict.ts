@@ -152,7 +152,7 @@ function expandDelegates(
   const out: AgentRef[] = [];
   const resolved = new Set<string>();
   const visiting = new Set<string>();
-  let complete = !duplicateLane;
+  let complete = !duplicateLane && coverage.completeness !== 'incomplete';
 
   const visit = (agent: AgentRef): void => {
     const key = agentKey(agent);
@@ -211,13 +211,19 @@ function resolveSubject(
   // was exhaustive. An observed lane omitted by a supposedly complete manifest invalidates
   // completeness rather than disappearing from evaluation.
   if (includeDelegates && anchors.some((agent) => agent.kind === 'root')) {
-    const observed = lanesOf(session);
+    const observed = uniqueAgents([
+      ...lanesOf(session),
+      ...(context?.lineage?.observedDelegates ?? []),
+    ]);
     const declared = new Set(expanded.agents.map(agentKey));
     const hasUndeclaredObserved = observed.some((agent) => !declared.has(agentKey(agent)));
     expanded = {
       agents: uniqueAgents([...expanded.agents, ...observed]),
       complete: expanded.complete && !hasUndeclaredObserved,
     };
+  }
+  if (includeDelegates && (context?.lineage?.gaps.length ?? 0) > 0) {
+    expanded = { ...expanded, complete: false };
   }
   const keys = new Set(expanded.agents.map(agentKey));
   return {

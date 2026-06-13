@@ -37,13 +37,26 @@ Roles are never inferred from transcript prose, filenames, people, or
 harness-specific labels. A missing or ambiguous binding produces
 `unverifiable: subject-unresolvable`.
 
-## Capture Coverage
+## Delegation Lineage And Capture Coverage
 
-Delegate completeness comes from the trusted launcher, not sidecar discovery.
+Delegate completeness is a coverage-scoped absence question, not a sidecar
+discovery question. anatrace separates three inputs:
+
+1. **Observed lineage** — what transcripts, sidecars, and captured harness hooks
+   prove was spawned or captured.
+2. **Expected launch boundary** — what a launcher says it intended to start and
+   capture.
+3. **Coverage completeness** — the reconciled statement that every expected lane
+   and every observed lane is represented and captured.
+
+Claude and Codex hook records can identify observed delegates, but hook records
+alone do not prove absence. Sidecars alone also do not prove absence. They tell
+anatrace which delegate lanes it can inspect and which gaps remain.
 
 ```ts
 interface CaptureCoverage {
   source: 'trusted-launcher';
+  completeness?: 'complete' | 'incomplete';
   lanes: LaneCaptureCoverage[];
 }
 
@@ -54,7 +67,32 @@ interface LaneCaptureCoverage {
     | { status: 'complete'; delegates: AgentRef[] }
     | { status: 'unavailable' };
 }
+
+interface ExpectedLaunchBoundary {
+  source: 'trusted-launcher';
+  lanes: ExpectedLaunchLane[];
+}
+
+interface ExpectedLaunchLane {
+  agent: AgentRef;
+  expectedDelegates: AgentRef[];
+}
 ```
+
+`CaptureCoverage` is the reconciled verdict input. A caller should pass complete
+coverage only after observed lineage and expected launch records agree. When a
+caller has only observed lineage, anatrace still checks delegate lanes whose
+transcript bytes were captured and parsed, and reports closed lineage gaps for
+observed-but-unchecked delegates. Delegate-inclusive negatives remain
+unverifiable.
+
+The CLI also accepts raw expected launch records using
+`kind: 'expected-launch-boundary'` in the `--capture-manifest` JSON. This record
+is launcher intent only. The CLI converts it into `CaptureCoverage` by marking a
+lane captured only when the extracted lineage lists that lane in `checkedLanes`.
+The generated coverage is marked `incomplete` if the reconciliation lineage is
+partial or has gaps, so expected records cannot prove a clean negative by
+themselves. Without observed lineage, every expected lane remains uncaptured.
 
 For a delegate-inclusive subject, an absent action is provable only when:
 
@@ -63,6 +101,7 @@ For a delegate-inclusive subject, an absent action is provable only when:
 3. Every declared delegate is marked captured.
 4. The recursive manifest is acyclic.
 5. Every observed root-session lane is represented by that manifest.
+6. Observed harness lineage does not contradict the expected launch boundary.
 
 Otherwise an absence produces
 `unverifiable: delegate-coverage-incomplete`.

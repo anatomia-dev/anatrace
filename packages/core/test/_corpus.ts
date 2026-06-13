@@ -19,7 +19,7 @@ function readBlob(p: string, name: string): NamedBlob {
 /**
  * Load the SYNTHETIC fixture corpus (A11). Layout:
  *   fixtures/corpus/<harness>-<name>/parent.jsonl
- *   fixtures/corpus/<harness>-<name>/subagents/agent-*.jsonl + agent-*.meta.json   (Claude only)
+ *   fixtures/corpus/<harness>-<name>/subagents/agent-*.jsonl + agent-*.meta.json
  * Blob names are canonical (parent first, then lexically-sorted subagents/...).
  * Returns `[]` when the corpus dir does not exist yet.
  */

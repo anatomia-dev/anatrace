@@ -1,5 +1,18 @@
 # anatrace-core
 
+## 0.2.0
+
+### Minor Changes
+
+- Add Phase 2 delegation lineage and coverage-scoped absence.
+
+  - Project deterministic lineage from captured Claude/Codex transcripts, sidecars, hooks, and Codex subagent storage evidence.
+  - Add closed lineage gap reasons and checked-lane coverage so delegate-inclusive negatives only pass over complete evidence.
+  - Parse captured delegate transcript lanes and attribute delegate evidence to stable `AgentRef` identities.
+  - Add `CaptureCoverage.completeness`, `ExpectedLaunchBoundary`, and `coverageFromExpectedLaunchBoundary`.
+  - Preserve the dominance rule: observed delegate violations remain `violated` even when coverage is incomplete.
+  - Keep clean delegate-inclusive absence `unverifiable: delegate-coverage-incomplete` when lineage or capture coverage is incomplete.
+
 ## 0.1.0
 
 ### Minor Changes

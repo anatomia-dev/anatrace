@@ -57,8 +57,21 @@ export type {
   DelegateManifest,
   LaneCaptureCoverage,
   CaptureCoverage,
+  ExpectedLaunchLane,
+  ExpectedLaunchBoundary,
   MandateEvaluationContext,
 } from './capture-coverage.js';
+export { coverageFromExpectedLaunchBoundary } from './capture-coverage.js';
+export { extractLineage } from './lineage.js';
+export type {
+  HarnessLineageHook,
+  LineageCompleteness,
+  LineageExtraction,
+  LineageFanoutCall,
+  LineageGap,
+  LineageGapReason,
+  LineagePointer,
+} from './lineage.js';
 export {
   channelCoverageForClaim,
   inspectBehavioralChannels,

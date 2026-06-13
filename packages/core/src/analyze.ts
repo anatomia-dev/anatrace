@@ -3,6 +3,7 @@ import type { Capabilities, Config, Finding, EvalContext } from './types.js';
 import type { Mandate } from './mandate.js';
 import type { MandateEvaluationContext } from './capture-coverage.js';
 import type { Report } from './report.js';
+import type { LineageExtraction } from './lineage.js';
 import { resolvePack } from './registry.js';
 import { resolveSeverity, resolveOptions, applyIgnores } from './config.js';
 import { runCompliance } from './compliance.js';
@@ -39,9 +40,11 @@ function timeBoundsOf(session: NormalizedSession): { start: number; end: number 
  *
  * D — when a `mandate` is supplied, `analyze` ALSO fills the three reserved v2 names
  * (`compliance`/`dossier`/`hookRequests`) via the pure {@link runCompliance} pass. It NEVER
- * reads `capabilities.judge` — that is `adjudicate`-time only (the bright line / E2 guard:
- * `analyze` with vs without `capabilities.judge` is byte-identical). No mandate ⇒ the three
- * fields are omitted ⇒ R2 byte-identity holds.
+	 * reads `capabilities.judge` — that is `adjudicate`-time only (the bright line / E2 guard:
+	 * `analyze` with vs without `capabilities.judge` is byte-identical). No mandate ⇒ the three
+	 * fields are omitted ⇒ R2 byte-identity holds. `lineage`, when supplied by a caller such as
+	 * the CLI, is an additive report receipt and may also inform delegate-completeness checks
+	 * through `mandateContext.lineage`.
  *
  * @param session - The normalized session to analyze
  * @param config - Resolved config (the CLI does discovery, A3); severity/enable/ignores/options
@@ -52,6 +55,7 @@ function timeBoundsOf(session: NormalizedSession): { start: number; end: number 
  *   against the repo-relative contract whitelist. Additive/optional; absent ⇒ prior behavior
  *   (worktree-strip only) + the still-absolute safety net (never false-accuse).
  * @param mandateContext - Trusted subject bindings and launcher-supplied capture coverage.
+ * @param lineage - Optional delegation lineage extracted from transcript blobs and hook records.
  * @returns The `Report` envelope
  */
 export function analyze(
@@ -61,6 +65,7 @@ export function analyze(
   mandate?: Mandate,
   repoRoot?: string,
   mandateContext?: MandateEvaluationContext,
+  lineage?: LineageExtraction,
 ): Report {
   const ctx: EvalContext = { session, ...(capabilities ? { capabilities } : {}) };
   const findings: Finding[] = [];
@@ -80,6 +85,9 @@ export function analyze(
   let dossier: Report['dossier'];
   let hookRequests: Report['hookRequests'];
   let verificationCoverage: Report['verificationCoverage'];
+  const effectiveMandateContext = lineage
+    ? { ...mandateContext, lineage: mandateContext?.lineage ?? lineage }
+    : mandateContext;
   if (mandate) {
     const result = runCompliance(
       mandate,
@@ -87,7 +95,7 @@ export function analyze(
       capabilities?.contentResolver,
       config,
       repoRoot,
-      mandateContext,
+      effectiveMandateContext,
     );
     compliance = result.verdicts;
     dossier = result.dossier;
@@ -117,5 +125,6 @@ export function analyze(
     ...(dossier ? { dossier } : {}),
     ...(hookRequests ? { hookRequests } : {}),
     ...(verificationCoverage ? { verificationCoverage } : {}),
+    ...(lineage ? { lineage } : {}),
   };
 }

@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import {
   parseSession,
   analyze,
+  extractLineage,
   skillsInvoked,
   complianceFindings,
   toSarif,
@@ -13,6 +14,7 @@ import {
 } from 'anatrace-core';
 import type {
   Capabilities,
+  HarnessLineageHook,
   Mandate,
   MandateEvaluationContext,
   Severity,
@@ -22,6 +24,7 @@ import { renderJson, renderPretty } from './render.js';
 import { resolveConfig } from './config.js';
 import { mandateShow, resolveMandate, resolvePolicy } from './mandate.js';
 import { resolveCaptureCoverage } from './capture.js';
+import { resolveLineageHooks } from './lineage-hooks.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json') as { version: string };
@@ -34,6 +37,7 @@ interface RunOptions {
   policy?: string;
   role?: string;
   captureManifest?: string;
+  lineageHooks?: string;
   ci?: boolean;
   failOn?: string;
   format?: string;
@@ -59,6 +63,7 @@ program
   .option('--policy <path>', 'verify against a generic .anatrace.yaml policy')
   .option('--role <name>', 'bind policy role:<name> to the root agent for this session')
   .option('--capture-manifest <path>', 'trusted launcher delegate/capture manifest (JSON)')
+  .option('--lineage-hooks <path>', 'Claude/Codex subagent hook capture records (JSONL or JSON array)')
   .option('--ci', 'CI gate mode: exit 1 on a violated@error (threshold defaults to error)')
   .option('--fail-on <severity>', 'gate threshold: off | info | warn | error')
   .action((pathArg: string | undefined, opts: RunOptions) => {
@@ -92,6 +97,16 @@ program
       process.stderr.write(`anatrace: could not parse session at ${discovered.sourcePath}.\n`);
       process.exit(EXIT_USAGE);
     }
+    const hooks: HarnessLineageHook[] = [];
+    if (opts.lineageHooks) {
+      const hookRecords = resolveLineageHooks(opts.lineageHooks);
+      if (!hookRecords.ok) {
+        process.stderr.write(hookRecords.message + '\n');
+        process.exit(EXIT_USAGE);
+      }
+      hooks.push(...hookRecords.hooks);
+    }
+    const lineage = extractLineage(session, discovered.blobs, hooks);
     let config;
     try {
       config = resolveConfig(opts.config); // CLI does disk discovery; core stays disk-free
@@ -120,10 +135,11 @@ program
       capabilities = { contentResolver: res.resolver };
       mandateContext = {
         thisAgent: { kind: 'root' },
+        lineage,
         ...(opts.role ? { roleBindings: { [opts.role]: [{ kind: 'root' }] } } : {}),
       };
       if (opts.captureManifest) {
-        const coverage = resolveCaptureCoverage(opts.captureManifest);
+        const coverage = resolveCaptureCoverage(opts.captureManifest, lineage);
         if (!coverage.ok) {
           process.stderr.write(coverage.message + '\n');
           process.exit(EXIT_USAGE);
@@ -142,6 +158,7 @@ program
       mandate,
       process.cwd(),
       mandateContext,
+      lineage,
     );
 
     // ── the GATING set: violated-only compliance findings (NEVER report.findings). ──────────

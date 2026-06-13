@@ -12,9 +12,10 @@ within it. Across both harnesses, entirely on your machine.
 - **Local** — no network, no upload. Your transcripts never leave your machine.
 - **Cross-harness** — one model over Claude *and* Codex.
 
-> **Status: v0.1 release candidate.** The cross-harness engine, generic policy
-> loader, deterministic verdict layer, fail-loud channel coverage, and coarse
-> egress detection have landed. Public APIs remain pre-1.0 and may evolve.
+> **Status: v0.2.** The cross-harness engine, generic policy loader,
+> deterministic verdict layer, fail-loud channel coverage, coarse egress
+> detection, and Phase 2 delegation lineage have landed. Public APIs remain
+> pre-1.0 and may evolve.
 
 ## Install
 
@@ -39,10 +40,10 @@ npm install --global anatrace
   none. Gate CI with `--ci` / `--fail-on`, or emit `--format sarif` for code
   scanning. *(File-scope adherence is the headline check; its accuracy is
   exemplar-validated today — a measured precision/recall is in progress.)*
-- **Channel coverage** — every policy run states how many claims were checked
-  and lists typed blind spots. Unknown tools or unsupported shell commands
-  downgrade a clean negative to `unverifiable`; observed violations remain
-  violations.
+- **Channel and lineage coverage** — every policy run states how many claims
+  were checked and lists typed blind spots. Unknown tools, unsupported shell
+  commands, and incomplete delegate capture downgrade a clean negative to
+  `unverifiable`; observed violations remain violations.
 
 This first release is the honest engine, not the final audit artifact. It
 provides deterministic transcript verification with explicit coverage limits.
@@ -86,18 +87,56 @@ Policy subjects are explicit: `this-agent`,
 `role:<name>` uses `delegates: include|exclude` and must be bound by the
 launcher or `--role`.
 
-Delegate-inclusive negatives require a trusted launcher capture manifest:
+Delegate-inclusive negatives require a complete evidence boundary. anatrace
+models that boundary in three parts:
+
+1. observed lineage from transcripts, sidecars, and captured harness hooks;
+2. expected launch records from a launcher such as Anatomia;
+3. reconciled capture coverage proving every expected delegate lane was captured.
+
+Hook records can be supplied as JSONL:
 
 ```sh
 anatrace session.jsonl \
   --policy .anatrace.yaml \
+  --lineage-hooks hooks.jsonl
+```
+
+A trusted launcher can also supply expected launch records. The CLI reconciles
+them with observed checked lineage before verdict evaluation:
+
+```sh
+anatrace session.jsonl \
+  --policy .anatrace.yaml \
+  --lineage-hooks hooks.jsonl \
   --capture-manifest capture.json \
   --json
 ```
 
-Without a complete recursive manifest, absence is
-`unverifiable: delegate-coverage-incomplete`; observed violations still carry
-evidence. See [Subject Axis](./docs/SUBJECT-AXIS.md).
+```json
+{
+  "kind": "expected-launch-boundary",
+  "source": "trusted-launcher",
+  "lanes": [
+    {
+      "agent": { "kind": "root" },
+      "expectedDelegates": [{ "kind": "subagent", "subagentId": "reviewer" }]
+    },
+    {
+      "agent": { "kind": "subagent", "subagentId": "reviewer" },
+      "expectedDelegates": []
+    }
+  ]
+}
+```
+
+Expected launch records are intent, not proof of capture. A lane is marked
+captured only when observed lineage shows its transcript bytes were checked.
+
+Without complete recursive capture coverage, absence produces an
+`unverifiable` verdict with reason `delegate-coverage-incomplete`; observed root
+or delegate violations still carry evidence. Finding some sidecars or hook
+records is not itself completeness. See [Subject Axis](./docs/SUBJECT-AXIS.md).
 
 `never_read` covers structured reads plus shell reads through `cat`, `sed`,
 `head`, `tail`, `grep`, input redirection, and file-backed `curl`/`wget`
