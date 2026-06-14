@@ -17,9 +17,30 @@ function isCodexRollout(p: string): boolean {
   return path.basename(p).startsWith('rollout-');
 }
 
-/** Build a Codex session group: the single rollout blob. */
+/**
+ * Build a Codex session group: the parent rollout (group[0]) + every sibling `rollout-*.jsonl` in
+ * the SAME date directory as CANDIDATE children. Real Codex stores a delegate/subagent session as a
+ * SEPARATE `rollout-*.jsonl` linked to its parent by `session_meta.parent_thread_id` — NOT as a
+ * Claude-style `subagents/agent-*.jsonl` child. The core reachability engine (the Codex adapter +
+ * `codexStorageFacts`) filters these candidates by `parent_thread_id` chaining, so unrelated same-day
+ * sessions are ignored and only true descendants are parsed as delegate lanes. (Previously discovery
+ * passed only the single parent blob, so the Codex reachability engine NEVER ran on real input — the
+ * lineage twin of the `cmd`-key bug.) Cross-midnight children (a child in the next day's dir) are a
+ * known, rare gap.
+ */
 function buildCodexGroup(rolloutPath: string): DiscoveredSession {
-  return { harness: 'codex', sourcePath: rolloutPath, blobs: [readBlob(rolloutPath, 'parent')] };
+  const blobs: NamedBlob[] = [readBlob(rolloutPath, 'parent')];
+  const dir = path.dirname(rolloutPath);
+  try {
+    const siblings = fs
+      .readdirSync(dir)
+      .filter((f) => f.startsWith('rollout-') && f.endsWith('.jsonl') && path.join(dir, f) !== rolloutPath)
+      .sort();
+    for (const f of siblings) blobs.push(readBlob(path.join(dir, f), `children/${f}`));
+  } catch {
+    /* no sibling dir / unreadable — fall back to the single parent blob */
+  }
+  return { harness: 'codex', sourcePath: rolloutPath, blobs };
 }
 
 /**
