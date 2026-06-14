@@ -882,3 +882,45 @@ describe('Phase 2 lineage extraction', () => {
     );
   });
 });
+
+// ── P0.6 — CC `toolUseId` drift: don't emit a spurious dispatch-link-missing on ≤2.1.90 ──────
+function claudeParentWithFanoutAtVersion(version: string): NamedBlob {
+  return {
+    name: 'parent',
+    bytes: enc(
+      jsonl([
+        {
+          type: 'assistant',
+          version,
+          sessionId: 'sess-lineage',
+          uuid: 'u1',
+          timestamp: '2026-06-08T00:00:01.000Z',
+          message: {
+            id: 'm1',
+            role: 'assistant',
+            model: 'claude-opus-4-8',
+            content: [
+              { type: 'tool_use', id: 'toolu_delegate', name: 'Agent', input: { subagent_type: 'explorer', description: 'Explore' } },
+            ],
+            usage: { input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          },
+        },
+      ]),
+    ),
+  };
+}
+
+describe('P0.6 — CC toolUseId drift: the dispatch-link-missing guard', () => {
+  it('a ≤2.1.90 session whose delegate meta lacks toolUseId emits NO dispatch-link-missing (the field never existed)', () => {
+    const session = parseSession([claudeParentWithFanoutAtVersion('2.1.90')]);
+    expect(session).not.toBeNull();
+    const lineage = extractLineage(session!, [claudeChild('x'), claudeMeta('x')]); // meta has NO toolUseId
+    expect(lineage.gaps.some((g) => g.reason === 'dispatch-link-missing')).toBe(false);
+  });
+  it('a >2.1.90 session with the same shape DOES emit dispatch-link-missing (the guard still fires when expected)', () => {
+    const session = parseSession([claudeParentWithFanoutAtVersion('2.1.171')]);
+    expect(session).not.toBeNull();
+    const lineage = extractLineage(session!, [claudeChild('x'), claudeMeta('x')]);
+    expect(lineage.gaps.some((g) => g.reason === 'dispatch-link-missing')).toBe(true);
+  });
+});

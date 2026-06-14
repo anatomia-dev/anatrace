@@ -1,6 +1,7 @@
 import type { NamedBlob } from './adapter.js';
 import { parseJsonObject, readJsonlLines } from './adapter.js';
 import type { AgentRef, Harness, NormalizedSession, SessionEvent } from './session.js';
+import { harnessVersionAtLeast } from './harness-support.js';
 
 export type LineageGapReason =
   | 'delegate-call-without-child-transcript'
@@ -357,6 +358,7 @@ function claudeGaps(
   facts: ReturnType<typeof sidecarFacts>,
   hooks: HarnessLineageHook[],
   checkedLanes: AgentRef[],
+  toolUseIdExpected: boolean,
 ): LineageGap[] {
   const gaps: LineageGap[] = [];
   const transcriptIds = new Set(facts.transcripts.keys());
@@ -444,7 +446,14 @@ function claudeGaps(
         blobName: meta.blobName,
         toolUseId: meta.toolUseId,
       });
-    } else if (fanoutCalls.length > 0 && !meta?.toolUseId && !lifecycleHookDelegateIds.has(id)) {
+    } else if (
+      toolUseIdExpected &&
+      fanoutCalls.length > 0 &&
+      !meta?.toolUseId &&
+      !lifecycleHookDelegateIds.has(id)
+    ) {
+      // Only a missing dispatch-link on a version that SHOULD carry `toolUseId` (CC > 2.1.90). On
+      // older sessions the field never existed, so its absence is expected, not a gap.
       gaps.push({
         reason: 'dispatch-link-missing',
         agent,
@@ -560,7 +569,11 @@ export function extractLineage(
     const sidecarAgents = [...facts.transcripts.keys(), ...facts.metadata.keys()]
       .map((id) => ({ kind: 'subagent', subagentId: id }) as AgentRef);
     observedDelegates = uniqueAgents([...observedDelegates, ...sidecarAgents, ...hookAgents(relevantHooks)]);
-    gaps = claudeGaps(fanoutCalls, facts, relevantHooks, checkedLanes);
+    // P0.6 — the CC delegate-sidecar `toolUseId` field did NOT exist at/below 2.1.90 (157/200 real
+    // ≤2.1.90 meta.json files lack it). Only treat its ABSENCE as a missing dispatch-link on versions
+    // recent enough to carry it — otherwise the majority of real older sessions get a spurious gap.
+    const toolUseIdExpected = harnessVersionAtLeast(session.observedVersions, '2.1.91');
+    gaps = claudeGaps(fanoutCalls, facts, relevantHooks, checkedLanes, toolUseIdExpected);
   } else {
     const storage = codexStorageFacts(blobs, session.sessionId);
     const storageAgents = [...storage.spawnedAgents.keys(), ...storage.childTranscripts.keys()]

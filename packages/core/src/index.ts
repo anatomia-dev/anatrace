@@ -106,7 +106,16 @@ export type {
   SessionEventBody,
   SessionEvent,
   NormalizedSession,
+  ParseHealth,
 } from './session.js';
+
+// Harness version support (P0.6) — the coarse catastrophic-floor + feature-presence helpers.
+export {
+  harnessVersionStatus,
+  harnessVersionAtLeast,
+  parseSemver,
+} from './harness-support.js';
+export type { HarnessVersionStatus, Semver } from './harness-support.js';
 
 // The multi-blob adapter contract (Item 2).
 export type { NamedBlob, AdapterCapabilities, Adapter } from './adapter.js';

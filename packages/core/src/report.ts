@@ -1,6 +1,6 @@
 import type { ProvenanceCounts } from './provenance.js';
 import type { Finding } from './types.js';
-import type { Harness } from './session.js';
+import type { Harness, ParseHealth } from './session.js';
 import type { ComplianceVerdict } from './verdict.js';
 import type { Dossier } from './dossier.js';
 import type { HookRequest } from './hook.js';
@@ -59,6 +59,8 @@ export interface Report {
     environment?: EnvironmentFacts;
     flow?: FlowFacts;
     scopeShape?: ScopeShapeFacts;
+    /** P0.6 — per-parse health (token-monotonicity / zero-event drift). OMITTED for synthetic sessions. */
+    parseHealth?: ParseHealth;
   };
   findings: Finding[];
   /** D — per-claim deterministic verdicts (no severity/rationale/model); present iff a mandate was supplied. */

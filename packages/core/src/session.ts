@@ -196,6 +196,22 @@ export type SessionEvent = SessionEventBody & {
   lineIndex: number;
 };
 
+/**
+ * P0.6 — per-parse health signals, pinned on the session SYNCHRONOUSLY at assembly. NEVER read the
+ * adapter's module-level `capabilities` singleton after the fact: a second `parse()` overwrites it
+ * (a latent race). Pinning here de-fangs that global. These gate absence-based verdicts: a suspect
+ * parse must NOT let a forbidden-command `not_contains` check read "no events" as "compliant" (a
+ * false PASS — the cardinal sin). Consumed by the absence gate (`session-parse-suspect`).
+ */
+export interface ParseHealth {
+  /** Cumulative-token monotonicity broke during parse — the stream doesn't fold like a known shape. */
+  tokenTotalSuspect: boolean;
+  /** Structured events the parser actually produced (the verdict-relevant timeline length). */
+  structuredEventCount: number;
+  /** The input transcript carried non-trivial bytes (so ZERO events ⇒ likely a misparse, not empty). */
+  inputNonEmpty: boolean;
+}
+
 export interface NormalizedSession {
   schemaVersion: number;
   harness: Harness;
@@ -204,4 +220,6 @@ export interface NormalizedSession {
   subagents: SubagentMeta[];
   events: SessionEvent[]; // canonically ordered (Item 9)
   counts: ProvenanceCounts; // pure projection — deriveCounts(session) (Item 4)
+  /** P0.6 — per-parse health; OMITTED for synthetic/hand-built sessions (treated as healthy). */
+  parseHealth?: ParseHealth;
 }

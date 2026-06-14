@@ -118,6 +118,7 @@ export function analyze(
       counts: session.counts,
       observedVersions: session.observedVersions,
       ...(timeBounds ? { timeBounds } : {}),
+      ...(session.parseHealth ? { parseHealth: session.parseHealth } : {}),
       ...(meta ?? {}),
     },
     findings: applyIgnores(findings, config),
