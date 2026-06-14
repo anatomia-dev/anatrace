@@ -276,6 +276,40 @@ function resultProvesAbsence(
 }
 
 /**
+ * P0.8 — the parse-suspect signal: a NON-EMPTY transcript that parsed to ZERO structured events is a
+ * likely misparse (e.g. a within-range renamed event type the parser silently skipped). "No events"
+ * then cannot prove absence — it may be a misparse, not compliance. Deliberately NOT gated on
+ * `tokenTotalSuspect`: that flips on the intentional multi-file Codex child-usage exclusion
+ * (`codex.ts`), so gating on it would mass-abstain every multi-file Codex session.
+ */
+function sessionParseSuspect(session: NormalizedSession): boolean {
+  const h = session.parseHealth;
+  return h !== undefined && h.inputNonEmpty && h.structuredEventCount === 0;
+}
+
+/**
+ * P0.8 — the SHARED absence gate. A verdict that is satisfied BY ABSENCE (no violating sighting) is
+ * honest only if the evidence boundary is complete. Returns the degraded `unverifiable` verdict when
+ * a completeness condition fails, else `null` (the absence stands). Used by BOTH the per-claim
+ * post-result gate AND the file-scope batch so neither can read "no events" as "compliant"
+ * (the cardinal sin — a forbidden-command `not_contains` falsely `satisfied` on a misparse).
+ * Parse-suspect is checked FIRST: if the parse can't be trusted, no narrower gate matters.
+ */
+function absenceGate(
+  claimId: string,
+  provesAbsence: boolean,
+  session: NormalizedSession,
+  channelGaps: number,
+  delegateComplete: boolean,
+): ComplianceVerdict | null {
+  if (!provesAbsence) return null;
+  if (sessionParseSuspect(session)) return verdict(claimId, 'unverifiable', 'session-parse-suspect');
+  if (channelGaps > 0) return verdict(claimId, 'unverifiable', 'channel-coverage-incomplete');
+  if (!delegateComplete) return verdict(claimId, 'unverifiable', 'delegate-coverage-incomplete');
+  return null;
+}
+
+/**
  * Resolve ONE claim to ONE verdict — universal pre-checks IN ORDER, then dispatch by target.
  * Takes NO judge parameter. `findings` is an out-param: a MASS file-scope spread pushes a
  * non-gating `info` Finding here (DECISION B) instead of a verdict.
@@ -339,19 +373,14 @@ export function verdictForClaim(
     repoRoot,
   );
   const channelCoverage = channelCoverageForClaim(claim, scopedEvents);
-  if (
-    resultProvesAbsence(claim, result) &&
-    channelCoverage.gaps.length > 0
-  ) {
-    return verdict(claim.id, 'unverifiable', 'channel-coverage-incomplete');
-  }
-  if (
-    resultProvesAbsence(claim, result) &&
-    !subject.delegateComplete
-  ) {
-    return verdict(claim.id, 'unverifiable', 'delegate-coverage-incomplete');
-  }
-  return result;
+  const gated = absenceGate(
+    claim.id,
+    resultProvesAbsence(claim, result),
+    session,
+    channelCoverage.gaps.length,
+    subject.delegateComplete,
+  );
+  return gated ?? result;
 }
 
 function dispatchTarget(
@@ -1160,13 +1189,16 @@ export function verdictsForMandate(
               claim.deviationHandling,
             )
           : readScopeVerdict(claim.id, whitelist, scopedSession, root);
-      out.push(
-        result.status === 'satisfied' && channelCoverage.gaps.length > 0
-          ? verdict(claim.id, 'unverifiable', 'channel-coverage-incomplete')
-          : result.status === 'satisfied' && !subject.delegateComplete
-            ? verdict(claim.id, 'unverifiable', 'delegate-coverage-incomplete')
-            : result,
+      // A satisfied file-scope verdict is absence-based (no out-of-scope path seen), so it runs the
+      // SAME shared absence gate — incl. the parse-suspect check (a misparse can't prove "stayed in scope").
+      const gated = absenceGate(
+        claim.id,
+        result.status === 'satisfied',
+        session,
+        channelCoverage.gaps.length,
+        subject.delegateComplete,
       );
+      out.push(gated ?? result);
       continue;
     }
     out.push(verdictForClaim(claim, session, resolver, sink, repoRoot, context));

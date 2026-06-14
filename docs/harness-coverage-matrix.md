@@ -34,15 +34,15 @@ firing on nearly every real session) and it is **not a trust signal**: "within r
    - the **feeder** extraction-honesty diagnostics (a recognized-but-unextracted obligation), and
    - **`parseHealth`** (below).
 
-3. **`parseHealth` → `session-parse-suspect` (signal shipped; gate lands in P0.8).** `parseHealth` is
-   pinned on the session at parse time: `structuredEventCount` / `inputNonEmpty` (a **non-empty**
-   transcript that parsed to **zero** structured events) is the gating signal, and `tokenTotalSuspect`
-   is a non-gating breadcrumb only (it also flips on the intentional multi-file Codex child-usage
-   exclusion, so it must NOT gate). The intended closure: absence-based (forbidden/negative) verdicts
-   resolve `unverifiable(session-parse-suspect)` — never `satisfied` — so a renamed event type can't
-   make a `not_contains "git push --force"` check read "no events" as "compliant." **This gate is
-   wired in P0.8 (the absence gate); until then the zero-event path is not yet closed.** The
-   `session-parse-suspect` reason is reserved now so the enum lock freezes the final vocabulary.
+3. **`parseHealth` → `session-parse-suspect`.** `parseHealth` is pinned on the session at parse time;
+   the gating signal is `inputNonEmpty && structuredEventCount === 0` (a **non-empty** transcript that
+   parsed to **zero** structured events — a likely within-range misparse). `tokenTotalSuspect` is a
+   **non-gating** breadcrumb only: it also flips on the intentional multi-file Codex child-usage
+   exclusion, so gating on it would mass-abstain every multi-file Codex session. When the gating signal
+   trips, the **shared absence gate** resolves absence-based (forbidden/negative) verdicts to
+   `unverifiable(session-parse-suspect)` — **never `satisfied`** — so a renamed event type can't make a
+   `not_contains "git push --force"` check read "no events" as "compliant." A legitimately short but
+   healthy session (≥1 event) does **not** trip it (no over-abstain).
 
 ## Known limitation (honestly stated)
 

@@ -146,7 +146,9 @@ describe('D-CONFIG — the CI gate exit codes (spawned binary)', () => {
     expect(r.stdout).toContain('lineage: checked root + 0 delegate lanes');
     expect(r.stdout).toContain('observed 1 delegates');
     expect(r.stdout).toContain('observed-partial');
-    expect(r.stdout).toContain('lineage gap: delegate-call-without-child-transcript:subagent:agent-a');
+    // P0.8 — a SubagentStart launch record with no observed transcript is now the precise
+    // launch-record-expected-but-unobserved (was the generic delegate-call-without-child-transcript).
+    expect(r.stdout).toContain('lineage gap: launch-record-expected-but-unobserved:subagent:agent-a');
   });
 });
 

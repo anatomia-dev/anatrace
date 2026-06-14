@@ -2,7 +2,7 @@
   "scrubVersion": "1",
   "vocabulary": ["∎path", "∎mail", "∎key", "∎hex"],
   "pairs": [
-    { "in": "/Users/rsmith/Projects/anatrace/x.ts", "out": "∎path" },
+    { "in": "/Users/dev/Projects/anatrace/x.ts", "out": "∎path" },
     { "in": "contact me at jane.doe@example.com please", "out": "contact me at ∎mail please" },
     { "in": "token sk-ABCDEFGH12345678 leaked", "out": "token ∎key leaked" },
     { "in": "gh token ghp_ABCDEFGH1234 here", "out": "gh token ∎key here" },
