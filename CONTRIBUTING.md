@@ -63,6 +63,17 @@ These two invariants are the brand. CI enforces both:
    key order, no `cost_usd`) and locked by a golden-fixture test. Do not reorder
    or add fields to those without a deliberate, reviewed contract change.
 
+## Versioning & releases
+
+- **Independent versioning** (`.changeset/config.json` → `"fixed": []`, `"linked": []`). `anatrace`
+  (CLI) and `anatrace-core` (engine) version **separately** — an embedder pins `anatrace-core`, not
+  the CLI, so they must not move in lockstep.
+- **No public-API change without a changeset.** The public surface of `anatrace-core` is frozen by an
+  export-snapshot test, and the `VerdictReason` / `LineageGapReason` vocabularies by value-locks
+  (`test/p04-public-api-lock.test.ts`). A surface change fails that test until the snapshot is
+  regenerated — which is your signal that the change is real and needs a changeset. CI enforces
+  `changeset status` on every PR.
+
 ## Code style
 
 - TypeScript strict (see `tsconfig.base.json`), ESM-only.

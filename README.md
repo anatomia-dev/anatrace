@@ -14,8 +14,9 @@ within it. Across both harnesses, entirely on your machine.
 
 > **Status: v0.2.** The cross-harness engine, generic policy loader,
 > deterministic verdict layer, fail-loud channel coverage, coarse egress
-> detection, and Phase 2 delegation lineage have landed. Public APIs remain
-> pre-1.0 and may evolve.
+> detection, and delegation lineage have landed. The public API surface and the
+> `unverifiable` reason vocabulary are frozen by a snapshot test; both `anatrace`
+> and `anatrace-core` are pre-1.0 and versioned independently.
 
 ## Install
 
@@ -35,11 +36,15 @@ npm install --global anatrace
   directly to the Mandate IR without a framework adapter.
 - **Compliance verdicts** — given a mandate, anatrace emits per-claim
   deterministic verdicts (`satisfied` / `violated` / `unverifiable`) with a
-  closed, machine-readable reason. Absent or non-comparable signal is always
-  `unverifiable`, never a guess — a verifier that over-claims is worse than
-  none. Gate CI with `--ci` / `--fail-on`, or emit `--format sarif` for code
-  scanning. *(File-scope adherence is the headline check; its accuracy is
-  exemplar-validated today — a measured precision/recall is in progress.)*
+  closed, machine-readable reason. **The public verdict surface ships ZERO LLM**:
+  there is no judge in the published API, so a verdict is byte-reproducible by
+  someone who doesn't trust you. (A consumer may inject their own judge as an
+  internal opt-in seam; it is not part of the supported surface and never gates.)
+  Absent or non-comparable signal is always `unverifiable`, never a guess — a
+  verifier that over-claims is worse than none. Gate CI with `--ci` / `--fail-on`,
+  or emit `--format sarif` for code scanning. *(File-scope adherence is the headline check; it is validated on
+  curated exemplars today — a measured precision/recall benchmark is in progress
+  as of 2026-06, not yet a published number.)*
 - **Channel and lineage coverage** — every policy run states how many claims
   were checked and lists typed blind spots. Unknown tools, unsupported shell
   commands, and incomplete delegate capture downgrade a clean negative to
@@ -155,8 +160,10 @@ gap.
   mandate, gate CI.
 - **`anatrace-core`** — the pure engine and shared type contract. No fs, no
   network, no clock, no randomness.
-- **`anatrace-action`** — a GitHub Action shell (placeholder). Consumed straight
-  from this repo (`uses: anatomia-dev/anatrace`); **not published to npm**.
+- **`anatrace-action`** — a reserved package slot for a future CI-gate GitHub
+  Action. **Not yet functional and not published — do not depend on it.** The CLI
+  already gates CI today (`anatrace --ci` / `--fail-on`, `--format sarif`); the
+  Action wrapper ships in a later release.
 
 ## Determinism & privacy contract
 
