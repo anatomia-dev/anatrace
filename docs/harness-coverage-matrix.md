@@ -34,13 +34,15 @@ firing on nearly every real session) and it is **not a trust signal**: "within r
    - the **feeder** extraction-honesty diagnostics (a recognized-but-unextracted obligation), and
    - **`parseHealth`** (below).
 
-3. **`parseHealth` → `session-parse-suspect`.** Pinned on the session at parse time:
-   `tokenTotalSuspect` (cumulative-token monotonicity broke) and `structuredEventCount` /
-   `inputNonEmpty` (a **non-empty** transcript that parsed to **zero** structured events). When either
-   trips, **absence-based (forbidden/negative) verdicts resolve `unverifiable(session-parse-suspect)`,
-   never `satisfied`** — closing the cardinal-sin path where a renamed event type makes a
-   `not_contains "git push --force"` check read "no events" as "compliant." *(The gating itself is
-   wired in the absence gate; `parseHealth` is the signal it consumes.)*
+3. **`parseHealth` → `session-parse-suspect` (signal shipped; gate lands in P0.8).** `parseHealth` is
+   pinned on the session at parse time: `structuredEventCount` / `inputNonEmpty` (a **non-empty**
+   transcript that parsed to **zero** structured events) is the gating signal, and `tokenTotalSuspect`
+   is a non-gating breadcrumb only (it also flips on the intentional multi-file Codex child-usage
+   exclusion, so it must NOT gate). The intended closure: absence-based (forbidden/negative) verdicts
+   resolve `unverifiable(session-parse-suspect)` — never `satisfied` — so a renamed event type can't
+   make a `not_contains "git push --force"` check read "no events" as "compliant." **This gate is
+   wired in P0.8 (the absence gate); until then the zero-event path is not yet closed.** The
+   `session-parse-suspect` reason is reserved now so the enum lock freezes the final vocabulary.
 
 ## Known limitation (honestly stated)
 
@@ -75,3 +77,16 @@ so unrelated same-day sessions are ignored and only true descendants are parsed 
 (Previously discovery passed only the single parent blob, so the Codex reachability engine never ran
 on real input — the lineage twin of the `cmd`-key bug.) A child written into the *next day's* dir
 after a midnight spawn is a known, rare gap.
+
+## Two corpora (honest provenance)
+
+The committed `fixtures/real/<harness>@<version>/` corpus is **real-FORMAT / synthetic-CONTENT**: the
+wire shape (keys, event types, version strings) is transcribed verbatim from real transcripts, but the
+VALUES (commands, paths, conversation) are safe placeholders. It is the regression guard against the
+KNOWN format — the class of the `cmd`-key bug — and is safe on a public repo. It is **not** full
+ground truth.
+
+The deeper check is the **gitignored** `fixtures/real-local/` corpus (`pin-fixture.ts`): real,
+scrubbed transcripts that `p07-real-conformance.test.ts` reads when present and skips otherwise. It is
+the periodic check against UNKNOWN drift and is **never pushed** — `scrub` only removes
+paths/emails/keys, not conversation or code, so real transcripts cannot go to a public repo.
