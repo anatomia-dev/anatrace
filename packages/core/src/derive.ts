@@ -27,21 +27,57 @@ export const DERIVE_VERSION = '3';
 const COMMAND_TOOLS = new Set(['Bash', 'exec_command']);
 
 /**
+ * The recognized command-bearing keys, in priority order. Claude's `Bash` tool carries the shell
+ * string under `command`; a real Codex `exec_command` carries it under `cmd` (verified on
+ * `cli_version` 0.135+ rollouts — the prior `command`-only read made every forbidden/force-push
+ * check DEAD on real Codex input). An argv ARRAY under either key (`["bash","-lc","…"]`) is joined.
+ */
+const COMMAND_KEYS = ['command', 'cmd'] as const;
+
+/**
  * S3 (meta-facts) — the SHARED command-string extractor, moved here (the `COMMAND_TOOLS` home)
  * and EXPORTED from its former module-private locus in `verdict.ts`. Pulls the shell-command
- * STRING from a `Bash` (Claude) / `exec_command` (Codex) tool event's `input.command` — the
- * ONLY transcript locus of a run command (`ToolEvent.name` is just `'Bash'`, so a `tool-names`
- * check can never see WHICH command ran). Returns `''` for any other tool. The `command-content`
- * verdict (`verdict.ts`) AND the M2 git-ops projection (`meta/git-ops.ts`) BOTH read it — one
- * extractor, no re-implementation.
+ * STRING from a `Bash` (Claude) / `exec_command` (Codex) tool event — the ONLY transcript locus
+ * of a run command (`ToolEvent.name` is just `'Bash'`, so a `tool-names` check can never see
+ * WHICH command ran). Reads `command` (Claude) then `cmd` (Codex), joining an argv array; returns
+ * `''` for any other tool or an unrecognized shape (see {@link isUnreadableCommandEvent} — the
+ * negative direction must NOT read that `''` as clean). The `command-content` verdict AND the M2
+ * git-ops projection BOTH read it — one extractor, no re-implementation.
  */
 export function commandStringOf(e: SessionEvent): string {
   if (e.type !== 'tool') return '';
   if (!COMMAND_TOOLS.has(e.name)) return '';
   const input = e.input;
   if (typeof input !== 'object' || input === null) return '';
-  const cmd = (input as Record<string, unknown>)['command'];
-  return typeof cmd === 'string' ? cmd : '';
+  const rec = input as Record<string, unknown>;
+  for (const k of COMMAND_KEYS) {
+    const v = rec[k];
+    if (typeof v === 'string') return v;
+    if (Array.isArray(v)) {
+      const argv = v.filter((p): p is string => typeof p === 'string');
+      if (argv.length > 0) return argv.join(' ');
+    }
+  }
+  return '';
+}
+
+/**
+ * The unknown-key CANARY. A command tool whose input object carries keys but NONE we recognize as
+ * command-bearing is harness/shape drift we cannot read — NOT an honest "no command ran." The
+ * forbidden-command (negative) direction must degrade such an event to `unverifiable`, never treat
+ * it as clean (a silent `''` here is exactly the false-PASS class this Phase fixes). An empty input
+ * object is genuinely command-less and does NOT trip the canary.
+ */
+export function isUnreadableCommandEvent(e: SessionEvent): boolean {
+  if (e.type !== 'tool' || !COMMAND_TOOLS.has(e.name)) return false;
+  const input = e.input;
+  if (typeof input !== 'object' || input === null) return false;
+  const rec = input as Record<string, unknown>;
+  if (Object.keys(rec).length === 0) return false;
+  return !COMMAND_KEYS.some((k) => {
+    const v = rec[k];
+    return typeof v === 'string' || Array.isArray(v);
+  });
 }
 
 function emptyTokens(): TokenCounts {

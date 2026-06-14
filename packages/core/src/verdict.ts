@@ -35,7 +35,7 @@ import type {
 } from './capture-coverage.js';
 import { skillsInvokedInScope } from './skills.js';
 import { laneCapture, isGradeableCapture } from './meta/lane.js';
-import { commandStringOf } from './derive.js';
+import { commandStringOf, isUnreadableCommandEvent } from './derive.js';
 import {
   channelCoverageForClaim,
   incompleteChannelCoverageForClaim,
@@ -110,6 +110,21 @@ function verdict(
   evidence: EvidencePointer[] = [],
 ): ComplianceVerdict {
   return { claimId, status, reason, evidence, source: 'deterministic' };
+}
+
+/**
+ * The pinned NEGATIVE-matcher mapping, shared across every forbidden-direction arm (read-paths,
+ * egress, read-scope, command-content, file-content): a hit on a forbidden predicate IS the
+ * violation (`violated`/`predicate-not-matched`, carrying evidence); no hit → `satisfied`/
+ * `predicate-matched`. One locus for this decision so an arm can never re-derive it backwards
+ * (the `evalFileContent` byte-identical-branch bug). POSITIVE-direction semantics genuinely differ
+ * per arm (a miss is `unverifiable`/`absent-signal` for read-paths/egress but `violated` for
+ * file-content), so those stay arm-local — this helper deliberately covers only the shared half.
+ */
+function negate(claimId: string, hit: boolean, evidence: EvidencePointer[] = []): ComplianceVerdict {
+  return hit
+    ? verdict(claimId, 'violated', 'predicate-not-matched', evidence)
+    : verdict(claimId, 'satisfied', 'predicate-matched');
 }
 
 /** The injected content source (B4) — disk impl at the CLI, or the in-core transcript impl. */
@@ -408,10 +423,7 @@ function evalReadPaths(
   const isNegative = NEGATIVE_MATCHERS.has(predicate.matcher);
   if (isNegative) {
     // `not_contains 'build_report'`: a hit (path CONTAINS it) is a VIOLATION of the obligation.
-    if (hits.length > 0) {
-      return verdict(claim.id, 'violated', 'predicate-not-matched', hits.map((h) => h.evidence));
-    }
-    return verdict(claim.id, 'satisfied', 'predicate-matched');
+    return negate(claim.id, hits.length > 0, hits.map((h) => h.evidence));
   }
   // Positive matcher: a hit is satisfaction.
   if (hits.length > 0) {
@@ -443,9 +455,7 @@ function readScopeVerdict(
       ...read.evidence,
     });
   }
-  return outside.length > 0
-    ? verdict(claimId, 'violated', 'predicate-not-matched', outside)
-    : verdict(claimId, 'satisfied', 'predicate-matched');
+  return negate(claimId, outside.length > 0, outside);
 }
 
 // ─── egress ─────────────────────────────────────────────────────────────────────────────
@@ -466,14 +476,11 @@ function evalEgress(
   const observed = inspectBehavioralChannels(scopedEvents).egress;
   const isNegative = NEGATIVE_MATCHERS.has(predicate.matcher) || claim.strength === 'forbidden';
   if (isNegative) {
-    return observed.length > 0
-      ? verdict(
-          claim.id,
-          'violated',
-          'predicate-not-matched',
-          observed.map((item) => item.evidence),
-        )
-      : verdict(claim.id, 'satisfied', 'predicate-matched');
+    return negate(
+      claim.id,
+      observed.length > 0,
+      observed.map((item) => item.evidence),
+    );
   }
   return observed.length > 0
     ? verdict(
@@ -737,10 +744,13 @@ function evalCommandContent(
   }
   if (isNegative) {
     // "must NOT run X": a matching command is a VIOLATION of the obligation.
-    if (hits.length > 0) {
-      return verdict(claim.id, 'violated', 'predicate-not-matched', hits.map(pointer));
+    if (hits.length > 0) return negate(claim.id, true, hits.map(pointer));
+    // Canary: an unreadable command-tool event (shape drift we couldn't parse) means we cannot
+    // prove the forbidden command was NOT run — degrade to unverifiable, never report false-clean.
+    if (scopedEvents.some(isUnreadableCommandEvent)) {
+      return verdict(claim.id, 'unverifiable', 'content-unresolvable');
     }
-    return verdict(claim.id, 'satisfied', 'predicate-matched');
+    return negate(claim.id, false);
   }
   // Positive ("ran X"): a hit is satisfaction; absence is unprovable, never a violation.
   if (hits.length > 0) {
@@ -777,11 +787,12 @@ function evalFileContent(
   const needle = String(predicate.value ?? '');
   const isNegative = NEGATIVE_MATCHERS.has(predicate.matcher);
   const matched = matchStr(text, predicate.matcher, needle);
-  if (isNegative) {
-    return matched
-      ? verdict(claim.id, 'satisfied', 'predicate-matched')
-      : verdict(claim.id, 'violated', 'predicate-not-matched');
-  }
+  // Negative ("must not contain X"): a match on the forbidden content IS the violation — the
+  // shared pinned mapping. (Prior bug: this branch was byte-identical to the positive one, so
+  // `not_contains "x"` on a file that DOES contain x falsely returned `satisfied`.)
+  if (isNegative) return negate(claim.id, matched);
+  // Positive ("must contain X"): a match satisfies; absence is a provable violation here (the arm
+  // can read the file, so a missing required substring is not `unverifiable`).
   return matched
     ? verdict(claim.id, 'satisfied', 'predicate-matched')
     : verdict(claim.id, 'violated', 'predicate-not-matched');
