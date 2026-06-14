@@ -75,3 +75,16 @@ so unrelated same-day sessions are ignored and only true descendants are parsed 
 (Previously discovery passed only the single parent blob, so the Codex reachability engine never ran
 on real input — the lineage twin of the `cmd`-key bug.) A child written into the *next day's* dir
 after a midnight spawn is a known, rare gap.
+
+## Two corpora (honest provenance)
+
+The committed `fixtures/real/<harness>@<version>/` corpus is **real-FORMAT / synthetic-CONTENT**: the
+wire shape (keys, event types, version strings) is transcribed verbatim from real transcripts, but the
+VALUES (commands, paths, conversation) are safe placeholders. It is the regression guard against the
+KNOWN format — the class of the `cmd`-key bug — and is safe on a public repo. It is **not** full
+ground truth.
+
+The deeper check is the **gitignored** `fixtures/real-local/` corpus (`pin-fixture.ts`): real,
+scrubbed transcripts that `p07-real-conformance.test.ts` reads when present and skips otherwise. It is
+the periodic check against UNKNOWN drift and is **never pushed** — `scrub` only removes
+paths/emails/keys, not conversation or code, so real transcripts cannot go to a public repo.

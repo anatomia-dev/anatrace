@@ -1,0 +1,5 @@
+{"type":"session_meta","payload":{"id":"019f0000-0000-7000-8000-000000000001","timestamp":"2026-06-13T12:00:00.000Z","cwd":"/repo","originator":"codex-tui","cli_version":"0.139.0","source":"cli","thread_source":"user","model_provider":"openai","base_instructions":{"text":"You are Codex, a coding agent."}}}
+{"timestamp":"2026-06-13T12:00:01.000Z","type":"turn_context","payload":{"model":"gpt-5"}}
+{"timestamp":"2026-06-13T12:00:02.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"git push --force origin main\",\"workdir\":\"/repo\",\"yield_time_ms\":1000,\"max_output_tokens\":6000}","call_id":"call_0001"}}
+{"timestamp":"2026-06-13T12:00:03.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_0001","output":"{\"output\":\"+ git push --force origin main\\n\",\"metadata\":{\"exit_code\":0}}"}}
+{"timestamp":"2026-06-13T12:00:04.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1200,"cached_input_tokens":0,"output_tokens":40,"reasoning_output_tokens":0,"total_tokens":1240}}}}

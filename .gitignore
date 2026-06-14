@@ -4,3 +4,8 @@ coverage
 .turbo
 *.tsbuildinfo
 .DS_Store
+
+# P0.7 — local-only real-transcript corpus (true ground truth, scrubbed). NEVER committed:
+# the repo is PUBLIC and scrub does not redact conversation/code. The committed
+# fixtures/real/ corpus is real-FORMAT / synthetic-CONTENT; this is the deeper local-only check.
+**/test/fixtures/real-local/
