@@ -187,20 +187,16 @@ export { analyze } from './analyze.js';
 export { parseSession } from './parse.js';
 
 // Meta-facts (M1–M4) — the additive per-session FACTS layer (no LLM, no verdict, no person-score).
-export { buildSessionMeta } from './meta/facts.js';
-export type {
-  SessionMetaFacts,
-  CompactionFacts,
-  CompactionBoundary,
-  ContextFacts,
-  EnvironmentFacts,
-  FlowFacts,
-  ScopeShapeFacts,
-} from './meta/facts.js';
-export { gitOpsOf } from './meta/git-ops.js';
-export type { GitOpsSummary, GitOpCounts } from './meta/git-ops.js';
-export { CONTEXT_LIMITS, CONTEXT_LIMITS_VERSION, contextLimitFor } from './meta/context-limits.js';
-export type { ContextLimitEntry } from './meta/context-limits.js';
+//
+// Phase 0 P0.0 decision = UN-EXPORT (reversible; Cracked is not a committed near-term plan).
+// The person-read FEEDER entry points (`buildSessionMeta`, `gitOpsOf`, `contextLimitFor`,
+// `CONTEXT_LIMITS`/`CONTEXT_LIMITS_VERSION`) and their named fact types are intentionally NOT part
+// of core's public surface: they feed a separate person-analytics aggregator ("Cracked"), which
+// sits at odds with the zero-LLM verdict positioning and only adds surface to freeze at the P0.4
+// API-lock. The COMPUTATION stays — `analyze()` still attaches the additive optional meta blocks to
+// `Report.session` (so the fact types remain reachable transitively through the public `Report`;
+// fully severing that is a separate "should `Report` expose meta-facts?" decision for P0.4).
+// `meta/lane.ts` is SPINE (`verdict.ts` imports `laneCapture`/`isGradeableCapture`) and STAYS public.
 export { rootLaneEvents, splitByLane, isRootLane } from './meta/lane.js';
 export { getRule, defaultPack, allRules, resolvePack } from './registry.js';
 export { resolveSeverity, resolveOptions, applyIgnores } from './config.js';
