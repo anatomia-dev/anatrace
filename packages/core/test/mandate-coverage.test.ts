@@ -14,7 +14,7 @@ describe('C5 — predicate coverage stat (per-claim; runtime + confidence exclud
     const stat = coverageStat(read('spec-kit-lowyield.mandate.json'));
     expect(stat).toEqual({ checkable: 1, total: 5 });
     expect(renderCoverageLine(stat)).toBe(
-      'anatrace mechanically checks 1 of 5 declared obligations on this transcript; the rest route to your model.',
+      'anatrace mechanically checks 1 of the 5 obligations it could structurally recognize on this transcript; obligations it could not recognize (and the rest) route to your model.',
     );
   });
 

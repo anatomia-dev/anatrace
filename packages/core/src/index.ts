@@ -52,6 +52,7 @@ export type {
   WindowClosesOn,
   ClaimSubject,
   FileScopeDeviationHandling,
+  ExtractionDiagnostic,
 } from './mandate.js';
 export type {
   DelegateManifest,

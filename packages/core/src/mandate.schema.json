@@ -9,9 +9,23 @@
   "properties": {
     "schemaVersion": { "type": "integer" },
     "framework": { "type": "string", "minLength": 1 },
-    "claims": { "type": "array", "items": { "$ref": "#/definitions/MandateClaim" } }
+    "claims": { "type": "array", "items": { "$ref": "#/definitions/MandateClaim" } },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/definitions/ExtractionDiagnostic" } }
   },
   "definitions": {
+    "ExtractionDiagnostic": {
+      "type": "object",
+      "description": "P0.3 extraction-honesty diagnostic: a recognized-but-unextracted obligation marker, or a detected-but-empty framework. NOT a prose-obligation count; the coverage denominator stays = extracted claims.",
+      "required": ["kind", "framework", "blob", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["unextracted-marker", "recognized-but-empty"] },
+        "framework": { "type": "string", "minLength": 1 },
+        "blob": { "type": "string" },
+        "marker": { "type": "string" },
+        "detail": { "type": "string" }
+      }
+    },
     "ClaimKind": {
       "enum": [
         "dispatch",
