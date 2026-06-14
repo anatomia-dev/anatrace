@@ -36,6 +36,7 @@ import type {
 import { skillsInvokedInScope } from './skills.js';
 import { laneCapture, isGradeableCapture } from './meta/lane.js';
 import { commandStringOf, isUnreadableCommandEvent } from './derive.js';
+import { harnessVersionStatus } from './harness-support.js';
 import {
   channelCoverageForClaim,
   incompleteChannelCoverageForClaim,
@@ -68,7 +69,11 @@ export type VerdictReason =
   | 'subject-unresolvable' // this-agent / role binding was absent or ambiguous
   | 'delegate-coverage-incomplete' // no complete trusted delegate manifest / missing declared lane
   | 'channel-coverage-incomplete' // a relevant tool/command channel could not be classified
-  | 'window-unresolvable'; // an event-triggered window couldn't be bounded
+  | 'window-unresolvable' // an event-triggered window couldn't be bounded
+  | 'harness-version-unrecognized' // P0.6 — the harness MAJOR version is outside the supported floor
+  | 'session-parse-suspect'; // P0.6/P0.8 — parse looks degraded (token-monotonicity broke, or a
+  //                            non-empty transcript parsed to ZERO events): absence is unprovable, so
+  //                            a forbidden-direction check must NOT read "no events" as compliant
 
 /** Evidence POINTS into the canonical timeline; it never COPIES bytes (scrub-safe, determinism-trivial). */
 export interface EvidencePointer {
@@ -292,6 +297,14 @@ export function verdictForClaim(
   const predicate = claim.predicate;
   // Pre-check 3 — runtime scope: the transcript can't see it (the honesty gate, ~90%+ of contract.yaml).
   if (predicate.scope === 'runtime') return verdict(claim.id, 'unverifiable', 'runtime-scoped');
+
+  // Pre-check 3.5 (P0.6) — catastrophic harness drift. A PARSEABLE version whose MAJOR is outside the
+  // supported floor is a format anatrace has never seen → it cannot trust ANY parse-based verdict over
+  // this transcript. This is the COARSE floor only; within-major drift is NOT gated here — that is the
+  // parse-suspect signal's job (the absence gate). `absent`/`recognized` versions never gate here.
+  if (harnessVersionStatus(session.harness, session.observedVersions) === 'out-of-range') {
+    return verdict(claim.id, 'unverifiable', 'harness-version-unrecognized');
+  }
 
   // Pre-check 4 — resolve WHO independently from WHEN. Missing bindings are never inferred.
   const subject = resolveSubject(claim, session, context);

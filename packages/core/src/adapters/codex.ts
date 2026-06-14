@@ -350,7 +350,11 @@ function parseCodex(group: NamedBlob[]): NormalizedSession | null {
     parseBlob(child.blob, child.lines, childAgent, false);
   }
 
-  return assembleSession('codex', sessionId, observed, [], events);
+  return assembleSession('codex', sessionId, observed, [], events, {
+    // P0.6 — captured SYNCHRONOUSLY here (see claude.ts); pinned on the session, never read late.
+    tokenTotalSuspect: capabilities.tokenTotalSuspect,
+    inputNonEmpty: group.some((b) => b.bytes.length > 0),
+  });
 }
 
 /** Per-parse mutable capabilities (reset at the top of every parse — no cross-session leak). */

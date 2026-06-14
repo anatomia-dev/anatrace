@@ -310,7 +310,12 @@ function parseClaude(group: NamedBlob[]): NormalizedSession | null {
     }
   }
 
-  return assembleSession('claude', sessionId, observed, subagents, events);
+  return assembleSession('claude', sessionId, observed, subagents, events, {
+    // P0.6 — captured SYNCHRONOUSLY here, at end-of-parse, then pinned on the session (never read
+    // from the `capabilities` singleton later — a subsequent parse() would overwrite it).
+    tokenTotalSuspect: capabilities.tokenTotalSuspect,
+    inputNonEmpty: group.some((b) => b.bytes.length > 0),
+  });
 }
 
 /** The Claude adapter (REQ Item 3): sidechain-first MAX dedup, subagent inclusion, canary, isError. */

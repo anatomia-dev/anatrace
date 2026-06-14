@@ -1,4 +1,4 @@
-import { computeCost, PRICES } from 'anatrace-core';
+import { computeCost, PRICES, harnessVersionStatus } from 'anatrace-core';
 import type { Report, SkillInvocation } from 'anatrace-core';
 
 /**
@@ -35,6 +35,24 @@ export function renderPretty(report: Report, skills: SkillInvocation[] = []): st
   const lines: string[] = [];
   lines.push(`anatrace — ${session.harness} · ${session.model || '(unknown model)'}`);
   if (session.observedVersions.length) lines.push(`  versions: ${session.observedVersions.join(', ')}`);
+  // P0.6 — harness-version & parse-health breadcrumb (an honesty signal; the GATING of absence
+  // verdicts on a suspect parse is the absence gate's job, Step 8, not this line).
+  const vStatus = harnessVersionStatus(session.harness, session.observedVersions);
+  if (vStatus === 'out-of-range') {
+    lines.push(
+      `  ⚠ harness version unrecognized: ${session.harness} ${session.observedVersions.join(', ')} is outside the supported range — verdicts over this transcript are unverifiable.`,
+    );
+  } else if (vStatus === 'absent') {
+    lines.push(`  ⚠ harness version absent — cannot confirm the transcript format; treat results with caution.`);
+  }
+  if (session.parseHealth?.tokenTotalSuspect) {
+    lines.push(`  ⚠ parse suspect: cumulative-token monotonicity broke — this transcript may not fold like a known version.`);
+  }
+  if (session.parseHealth && session.parseHealth.inputNonEmpty && session.parseHealth.structuredEventCount === 0) {
+    lines.push(
+      `  ⚠ parse suspect: a non-empty transcript produced ZERO structured events — likely a format drift (absence-based checks abstain).`,
+    );
+  }
   lines.push(
     `  tokens: input ${t.input} · output ${t.output} · cache_create ${t.cache_create} · cache_read ${t.cache_read}`,
   );

@@ -67,15 +67,29 @@ export function assembleSession(
   observedVersions: string[],
   subagents: SubagentMeta[],
   events: SessionEvent[],
+  // P0.6 — per-parse health captured SYNCHRONOUSLY by the adapter at end-of-parse (NOT read from the
+  // module-level `capabilities` singleton later — a second parse() would overwrite it). Omitted for
+  // synthetic/hand-built sessions, which are treated as healthy.
+  health?: { tokenTotalSuspect: boolean; inputNonEmpty: boolean },
 ): NormalizedSession {
+  const ordered = canonicalSort(events);
   const session: NormalizedSession = {
     schemaVersion: SCHEMA_VERSION,
     harness,
     sessionId,
     observedVersions,
     subagents,
-    events: canonicalSort(events),
+    events: ordered,
     counts: zeroCounts(),
+    ...(health
+      ? {
+          parseHealth: {
+            tokenTotalSuspect: health.tokenTotalSuspect,
+            structuredEventCount: ordered.length,
+            inputNonEmpty: health.inputNonEmpty,
+          },
+        }
+      : {}),
   };
   session.counts = deriveCounts(session);
   return session;
