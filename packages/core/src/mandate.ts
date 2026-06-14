@@ -268,8 +268,41 @@ export type MandateClaim = IntentClaim | CheckableClaim;
  * A framework-agnostic mandate: the typed declaration extracted by a `MandateAdapter`. Net
  * fills the prior `claims: unknown[]` stub.
  */
+/**
+ * A typed, deterministic extraction-honesty diagnostic (P0.3 — feeders fail loud). It surfaces a
+ * gap between what an adapter RECOGNIZED as obligation-bearing and what it could mechanically
+ * extract, so silent under-extraction (a reworded imperative, a YAML block-list, an Iron Law the
+ * adapter triggers on but cannot parse) becomes a visible, named limitation instead of a flattering
+ * empty/partial result.
+ *
+ * This is deliberately NOT a prose-obligation count: the coverage denominator stays = extracted
+ * claims (counting unrecognized prose would be circular, non-deterministic, and over-claiming — the
+ * exact failure the brand exists to prevent). A diagnostic fires ONLY on markers the adapter already
+ * recognizes as obligation-bearing, so it is bounded and reproducible.
+ */
+export interface ExtractionDiagnostic {
+  /**
+   * `unextracted-marker` — a KNOWN obligation marker was recognized but produced no claim (e.g. a
+   * superpowers `Iron Law`, a drifted `ana-verify` independence rule, an unparsed `skills:` block).
+   * `recognized-but-empty` — the framework was detected but ZERO claims were extractable at all.
+   */
+  kind: 'unextracted-marker' | 'recognized-but-empty';
+  framework: string;
+  /** The source blob(s) the gap was found in. */
+  blob: string;
+  /** For `unextracted-marker`: the recognized marker id (e.g. 'iron-law', 'verify-independence'). */
+  marker?: string;
+  /** A deterministic, human-readable description of the gap (no model, no randomness). */
+  detail: string;
+}
+
 export interface Mandate {
   schemaVersion: number;
   framework: string;
   claims: MandateClaim[];
+  /**
+   * Extraction-honesty diagnostics (P0.3). OMITTED entirely when empty — additive, so clean
+   * extraction output is byte-identical to before (the golden corpus is untouched).
+   */
+  diagnostics?: ExtractionDiagnostic[];
 }

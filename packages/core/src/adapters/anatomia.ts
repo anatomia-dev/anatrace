@@ -1,6 +1,6 @@
 import type { NamedBlob } from '../adapter.js';
 import type { MandateAdapter } from '../types.js';
-import type { Mandate, MandateClaim, ClaimSource, ClaimStrength } from '../mandate.js';
+import type { Mandate, MandateClaim, ClaimSource, ClaimStrength, ExtractionDiagnostic } from '../mandate.js';
 import { decodeBlob } from './mandate-shared.js';
 
 /**
@@ -169,6 +169,7 @@ function detect(group: NamedBlob[]): boolean {
 
 function extract(group: NamedBlob[]): Mandate | null {
   const claims: MandateClaim[] = [];
+  const diagnostics: ExtractionDiagnostic[] = [];
 
   for (const b of group) {
     const text = decodeBlob(b.bytes);
@@ -176,11 +177,24 @@ function extract(group: NamedBlob[]): Mandate | null {
     if (isAgentDef(b.name)) {
       const agent = agentName(text, b.name);
       const role = roleOf(agent);
+      const skills = frontmatterSkills(text);
+      // P0.3 — a `skills:` frontmatter key is present but no inline list parsed (YAML block-list or
+      // reworded shape): every skill-invoked claim would vanish silently. Surface it as a gap.
+      const fmBlock = /^---\n([\s\S]*?)\n---/m.exec(text)?.[1] ?? '';
+      if (!skills.length && /^skills\s*:/m.test(fmBlock)) {
+        diagnostics.push({
+          kind: 'unextracted-marker',
+          framework: 'anatomia',
+          blob: b.name,
+          marker: 'skills-frontmatter',
+          detail: `${b.name}: a 'skills:' frontmatter key is present but no inline 'skills: [a, b]' list parsed — a block-list or reworded shape would silently drop every skill-invoked claim.`,
+        });
+      }
       // skill-invoked — one per frontmatter `skills:` entry. The DECLARED strength (D-D) is
       // resolved from the explicit per-(role × skill) map; absent declaration ⇒ `optional`
       // (byte-identical to the pre-positive-obligations claim — the `strength` key is simply
       // omitted, so an `optional` skill claim is a no-op on the absence/presence arms).
-      for (const skill of frontmatterSkills(text)) {
+      for (const skill of skills) {
         const src: ClaimSource = { kind: 'in-blob', blob: b.name, fidelity: 'verbatim' };
         const strength = strengthFor(role, skill);
         const saysVerb =
@@ -220,6 +234,17 @@ function extract(group: NamedBlob[]): Mandate | null {
             matcher: 'not_contains',
             value: 'build_report',
           },
+        });
+      } else if (isVerifyAgent(agent)) {
+        // P0.3 — a verify agent whose build-report independence imperative did NOT match the
+        // extractor. This is the most-marketed obligation; a reworded phrasing ("does not consult
+        // the builder's writeup") would silently drop it. Surface the gap instead of vanishing.
+        diagnostics.push({
+          kind: 'unextracted-marker',
+          framework: 'anatomia',
+          blob: b.name,
+          marker: 'verify-independence',
+          detail: `${b.name}: '${agent}' is a verify agent but no build-report independence constraint was extractable — a reworded phrasing would silently drop this safety claim.`,
         });
       }
       // verify read-only-codebase — FORBIDDEN code-branch-rewriting git commands (command-run).
@@ -281,8 +306,21 @@ function extract(group: NamedBlob[]): Mandate | null {
     }
   }
 
-  if (!claims.length) return null;
-  return { schemaVersion: 1, framework: 'anatomia', claims };
+  // Did we process one of OUR recognized shapes (an agent-def or contract file)? If not, this group
+  // is not ours — return null (unchanged contract: degrade-to-null on non-matching input).
+  const recognized = group.some((b) => isAgentDef(b.name) || isContract(b.name));
+  if (!claims.length && !diagnostics.length && !recognized) return null;
+  // Recognized our shape but extracted zero obligations → surface a recognized-but-empty gap so the
+  // "dangerous middle" (detected-but-unparsed) is loud, not a flattering empty result.
+  if (!claims.length) {
+    diagnostics.push({
+      kind: 'recognized-but-empty',
+      framework: 'anatomia',
+      blob: group.map((b) => b.name).join(', '),
+      detail: `the anatomia framework was detected but no obligations were extractable — verification would be vacuous.`,
+    });
+  }
+  return { schemaVersion: 1, framework: 'anatomia', claims, ...(diagnostics.length ? { diagnostics } : {}) };
 }
 
 export const anatomiaAdapter: MandateAdapter = { framework: 'anatomia', detect, extract };

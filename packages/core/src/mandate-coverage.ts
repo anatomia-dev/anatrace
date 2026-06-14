@@ -41,7 +41,12 @@ export function coverageStat(mandate: Mandate): CoverageStat {
   return { checkable, total: mandate.claims.length };
 }
 
-/** The honest, user-facing one-liner. */
+/**
+ * The honest, user-facing one-liner. The denominator is the obligations the adapter could
+ * STRUCTURALLY RECOGNIZE — NOT a claim of total recall. Obligations expressed only in prose are
+ * out of scope (surfaced separately as extraction diagnostics) and route to the model. Wording is
+ * deliberate: "declared" implied the denominator was the complete obligation surface; it is not.
+ */
 export function renderCoverageLine(stat: CoverageStat): string {
-  return `anatrace mechanically checks ${stat.checkable} of ${stat.total} declared obligations on this transcript; the rest route to your model.`;
+  return `anatrace mechanically checks ${stat.checkable} of the ${stat.total} obligations it could structurally recognize on this transcript; obligations it could not recognize (and the rest) route to your model.`;
 }
