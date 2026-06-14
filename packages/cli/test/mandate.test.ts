@@ -19,7 +19,7 @@ describe('C5 — `anatrace mandate show` end-to-end (extract → render → cove
     expect(res.message).toContain('mandate — anatomia (7 claim(s))');
     // EXACT X/Y — a wrong denominator (collapsing the 2 runtime contract-matchers) would fail.
     expect(res.message).toContain(
-      'anatrace mechanically checks 5 of 7 declared obligations on this transcript; the rest route to your model.',
+      'anatrace mechanically checks 5 of the 7 obligations it could structurally recognize on this transcript; obligations it could not recognize (and the rest) route to your model.',
     );
   });
 
@@ -27,7 +27,7 @@ describe('C5 — `anatrace mandate show` end-to-end (extract → render → cove
     const res = mandateShow(path.join(SRC, 'superpowers'));
     expect(res.ok).toBe(true);
     expect(res.message).toContain(
-      'anatrace mechanically checks 1 of 2 declared obligations on this transcript; the rest route to your model.',
+      'anatrace mechanically checks 1 of the 2 obligations it could structurally recognize on this transcript; obligations it could not recognize (and the rest) route to your model.',
     );
   });
 
@@ -45,7 +45,7 @@ describe('C5 — EXACT X/Y on the low-yield spec-kit fixture (KNOWN composition)
     expect(coverageStat(m)).toEqual({ checkable: 1, total: 5 });
     const out = renderMandate(m);
     expect(out).toContain(
-      'anatrace mechanically checks 1 of 5 declared obligations on this transcript; the rest route to your model.',
+      'anatrace mechanically checks 1 of the 5 obligations it could structurally recognize on this transcript; obligations it could not recognize (and the rest) route to your model.',
     );
   });
 });

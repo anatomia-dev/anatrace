@@ -82,6 +82,16 @@ export function renderMandate(mandate: Mandate): string {
   const stat = coverageStat(mandate);
   lines.push('');
   lines.push(`  ${renderCoverageLine(stat)}`);
+  // P0.3 — extraction-honesty gaps: obligation markers we RECOGNIZED but could not mechanically
+  // extract. Surfaced loudly so under-extraction is a visible limitation, not a silent omission.
+  if (mandate.diagnostics?.length) {
+    lines.push('');
+    lines.push(`  ⚠ extraction gaps (${mandate.diagnostics.length}) — recognized but NOT mechanically checked:`);
+    for (const d of mandate.diagnostics) {
+      const tag = d.marker ? `${d.kind}:${d.marker}` : d.kind;
+      lines.push(`      • [${tag}] ${d.detail}`);
+    }
+  }
   return lines.join('\n');
 }
 
@@ -150,6 +160,15 @@ export function resolveMandate(dir: string): ResolveMandateResult {
   const mandate = adapter.extract(group);
   if (!mandate) {
     return { ok: false, message: `anatrace: ${adapter.framework} adapter extracted no claims.` };
+  }
+  if (!mandate.claims.length) {
+    // P0.3 — recognized-but-empty: the framework was detected but ZERO obligations were extractable.
+    // Surface the gap LOUDLY instead of verifying nothing / failing as if no framework was present.
+    const gaps = (mandate.diagnostics ?? []).map((d) => `  - ${d.detail}`).join('\n');
+    return {
+      ok: false,
+      message: `anatrace: ${adapter.framework} framework detected but no obligations were extractable — verification would be vacuous.${gaps ? `\n${gaps}` : ''}`,
+    };
   }
   const errs = validateMandate(mandate);
   if (errs.length) {

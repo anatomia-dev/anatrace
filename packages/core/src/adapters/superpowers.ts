@@ -1,6 +1,13 @@
 import type { NamedBlob } from '../adapter.js';
 import type { MandateAdapter } from '../types.js';
-import type { Mandate, MandateClaim, ClaimSource, ClaimScope, ClaimSubject } from '../mandate.js';
+import type {
+  Mandate,
+  MandateClaim,
+  ClaimSource,
+  ClaimScope,
+  ClaimSubject,
+  ExtractionDiagnostic,
+} from '../mandate.js';
 import { decodeBlob } from './mandate-shared.js';
 
 /**
@@ -70,11 +77,25 @@ function detect(group: NamedBlob[]): boolean {
 
 function extract(group: NamedBlob[]): Mandate | null {
   const claims: MandateClaim[] = [];
+  const diagnostics: ExtractionDiagnostic[] = [];
 
   for (const b of group) {
     if (!isSkillFile(b.name)) continue;
     const text = decodeBlob(b.bytes);
     const skill = skillName(text, b.name);
+
+    // P0.3 — an `Iron Law` is a recognized obligation marker (it TRIGGERS detect()) but the adapter
+    // emits NO claim for it (Iron Laws are prose, not a structural shape). Surface it as a named gap
+    // rather than letting a skill whose only obligation is an Iron Law extract to nothing.
+    if (/\bIron Law\b/.test(text)) {
+      diagnostics.push({
+        kind: 'unextracted-marker',
+        framework: 'superpowers',
+        blob: b.name,
+        marker: 'iron-law',
+        detail: `${b.name}: an 'Iron Law' obligation was recognized but is not mechanically extractable (prose, not a structural shape) — it is NOT verified and routes to your model.`,
+      });
+    }
 
     // skill-announced — ONLY the real `**Announce at start:** "…"` literal (placeholder
     // graphviz templates carrying `[skill]`/`[purpose]` are excluded by the regex shape).
@@ -122,8 +143,16 @@ function extract(group: NamedBlob[]): Mandate | null {
     }
   }
 
-  if (!claims.length) return null;
-  return { schemaVersion: 1, framework: 'superpowers', claims };
+  if (!claims.length && !diagnostics.length) return null;
+  if (!claims.length) {
+    diagnostics.push({
+      kind: 'recognized-but-empty',
+      framework: 'superpowers',
+      blob: group.map((b) => b.name).join(', '),
+      detail: `the superpowers framework was detected but no mechanically-checkable claims were extractable — the obligations route to your model.`,
+    });
+  }
+  return { schemaVersion: 1, framework: 'superpowers', claims, ...(diagnostics.length ? { diagnostics } : {}) };
 }
 
 export const superpowersAdapter: MandateAdapter = { framework: 'superpowers', detect, extract };
