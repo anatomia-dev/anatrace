@@ -56,3 +56,22 @@ diagnostic (which field changed) is a tracked follow-on. What is guaranteed toda
 alongside `runtime-scoped`, `codex-blind`, `absent-signal`, `delegate-coverage-incomplete`,
 `channel-coverage-incomplete`, and the rest. All are **non-gating**: an `unverifiable` verdict never
 fails a CI gate — only `violated` does.
+
+## Codex storage layout (discovery)
+
+A Codex delegate/subagent session is **not** a Claude-style `subagents/agent-*.jsonl` child. It is a
+**separate `rollout-*.jsonl`** written into the same `~/.codex/sessions/YYYY/MM/DD/` date directory,
+linked to its parent by `session_meta.parent_thread_id` (and `source.subagent.thread_spawn.parent_thread_id`):
+
+```
+~/.codex/sessions/2026/06/13/
+  rollout-…-<parent-id>.jsonl     # session_meta.id = <parent-id>
+  rollout-…-<child-id>.jsonl      # session_meta.parent_thread_id = <parent-id>
+```
+
+Discovery gathers the parent rollout **plus every sibling `rollout-*.jsonl` in that date directory**
+as candidate children. The core reachability engine then filters them by `parent_thread_id` chaining,
+so unrelated same-day sessions are ignored and only true descendants are parsed as delegate lanes.
+(Previously discovery passed only the single parent blob, so the Codex reachability engine never ran
+on real input — the lineage twin of the `cmd`-key bug.) A child written into the *next day's* dir
+after a midnight spawn is a known, rare gap.
