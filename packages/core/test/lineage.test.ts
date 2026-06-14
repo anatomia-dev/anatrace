@@ -481,7 +481,10 @@ describe('Phase 2 lineage extraction', () => {
       cache_create: 0,
       cache_read: 20,
     });
-    expect(codexAdapter.capabilities.tokenTotalSuspect).toBe(true);
+    // P0.8 — excluding a child lane's usage is normal multi-file Codex, NOT a monotonicity break,
+    // so it must NOT flag the parse suspect (else the absence gate would mass-abstain every
+    // multi-file Codex session). tokenTotalSuspect stays reserved for a real cumulative regression.
+    expect(codexAdapter.capabilities.tokenTotalSuspect).toBe(false);
   });
 
   it('reports parent-only Codex storage evidence as a missing child transcript', () => {
@@ -545,9 +548,22 @@ describe('Phase 2 lineage extraction', () => {
     expect(JSON.stringify(extractLineage(sessionA!, [parent, duplicateA, duplicateB]))).toBe(
       JSON.stringify(extractLineage(sessionB!, [duplicateB, parent, duplicateA])),
     );
-    expect(extractLineage(sessionA!, [parent, duplicateA, duplicateB]).gaps).toEqual([
-      expect.objectContaining({ blobName: 'subagents/agent-codex-child-storage-a.jsonl' }),
-    ]);
+    const gaps = extractLineage(sessionA!, [parent, duplicateA, duplicateB]).gaps;
+    // Deterministic first blob is kept...
+    expect(gaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ blobName: 'subagents/agent-codex-child-storage-a.jsonl' }),
+      ]),
+    );
+    // ...AND the collision is now SURFACED (P0.8), not silently deduped.
+    expect(gaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          reason: 'duplicate-child-session-id',
+          agent: { kind: 'subagent', subagentId: 'codex-child-storage' },
+        }),
+      ]),
+    );
   });
 
   it('matches Codex spawn outputs regardless of line order within a reachable transcript', () => {
@@ -922,5 +938,24 @@ describe('P0.6 — CC toolUseId drift: the dispatch-link-missing guard', () => {
     expect(session).not.toBeNull();
     const lineage = extractLineage(session!, [claudeChild('x'), claudeMeta('x')]);
     expect(lineage.gaps.some((g) => g.reason === 'dispatch-link-missing')).toBe(true);
+  });
+});
+
+describe('P0.8 — launch-record-expected-but-unobserved is reachable (not a dead enum member)', () => {
+  it('a SubagentStart launch record with no observed transcript/stop emits launch-record-expected-but-unobserved', () => {
+    const session = parseSession([claudeParentWithFanout()], 'claude');
+    expect(session).not.toBeNull();
+    const hooks: HarnessLineageHook[] = [
+      { harness: 'claude', event: 'SubagentStart', parentSessionId: session!.sessionId, agentId: 'lr-unobserved', agentType: 'Explore' },
+    ];
+    const lineage = extractLineage(session!, [], hooks); // no child transcript blob, no SubagentStop
+    expect(lineage.gaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          reason: 'launch-record-expected-but-unobserved',
+          agent: { kind: 'subagent', subagentId: 'lr-unobserved' },
+        }),
+      ]),
+    );
   });
 });

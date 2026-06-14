@@ -10,14 +10,16 @@ export type LineageGapReason =
   | 'child-transcript-metadata-mismatch'
   | 'dispatch-link-missing'
   | 'dispatch-link-mismatch'
-  | 'unknown-delegation-channel'
   | 'harness-lineage-unsupported'
   | 'codex-subagent-storage-unknown'
   | 'delegate-transcript-unreadable'
   | 'launch-record-expected-but-unobserved'
-  | 'observed-unexpected-delegate'
-  | 'schema-unknown'
-  | 'negative-proof-not-available';
+  | 'duplicate-child-session-id';
+//  P0.8 — trimmed 4 declared-but-never-emitted members (unknown-delegation-channel,
+//  observed-unexpected-delegate, schema-unknown, negative-proof-not-available): a blind-spot enum
+//  must not itself carry blind spots. `launch-record-expected-but-unobserved` is now WIRED (the
+//  hook-launcher-vs-observed gap), and `duplicate-child-session-id` is NEW (a colliding Codex
+//  session_meta.id that the reachability dedup would otherwise silently drop).
 
 export type HarnessLineageHook =
   | {
@@ -260,10 +262,12 @@ function isCodexToolCallOutput(payload: Record<string, unknown>): boolean {
 function codexStorageFacts(blobs: NamedBlob[], parentSessionId: string): {
   spawnedAgents: Map<string, string>;
   childTranscripts: Map<string, string>;
+  duplicateChildSessionIds: string[];
 } {
   const spawnedAgents = new Map<string, string>();
   const childTranscripts = new Map<string, string>();
-  if (!parentSessionId) return { spawnedAgents, childTranscripts };
+  const duplicateChildSessionIds = new Set<string>();
+  if (!parentSessionId) return { spawnedAgents, childTranscripts, duplicateChildSessionIds: [] };
   const facts = blobs.slice().sort((a, b) => a.name.localeCompare(b.name)).map((blob) => {
     const lines = readJsonlLines(blob.bytes);
     let blobSessionId = '';
@@ -337,14 +341,18 @@ function codexStorageFacts(blobs: NamedBlob[], parentSessionId: string): {
   }
   for (const fact of facts) {
     if (fact.sessionId && fact.sessionId !== parentSessionId && fact.parentIds.some((parentId) => reachableSessionIds.has(parentId))) {
-      if (!childTranscripts.has(fact.sessionId)) childTranscripts.set(fact.sessionId, fact.blobName);
+      // P0.8 — two reachable children claiming the SAME session_meta.id is a collision we cannot
+      // disambiguate; the map keeps the first and would silently drop the rest. Record it as a gap
+      // so completeness does not read dishonestly clean.
+      if (childTranscripts.has(fact.sessionId)) duplicateChildSessionIds.add(fact.sessionId);
+      else childTranscripts.set(fact.sessionId, fact.blobName);
     }
     if (!fact.sessionId || !reachableSessionIds.has(fact.sessionId)) continue;
     for (const agentId of fact.spawned) {
       if (!spawnedAgents.has(agentId)) spawnedAgents.set(agentId, fact.blobName);
     }
   }
-  return { spawnedAgents, childTranscripts };
+  return { spawnedAgents, childTranscripts, duplicateChildSessionIds: [...duplicateChildSessionIds].sort() };
 }
 
 function hookAgents(hooks: HarnessLineageHook[]): AgentRef[] {
@@ -464,10 +472,18 @@ function claudeGaps(
   for (const id of hookDelegateIds) {
     if (transcriptIds.has(id)) continue;
     const stop = hooks.find((hook) => hook.event === 'SubagentStop' && hook.agentId === id);
+    const launched = hooks.some((hook) => hook.event === 'SubagentStart' && hook.agentId === id);
     gaps.push({
-      reason: stop?.event === 'SubagentStop' && stop.agentTranscriptPath
-        ? 'delegate-transcript-unreadable'
-        : 'delegate-call-without-child-transcript',
+      // A stop promised a transcript we couldn't read → delegate-transcript-unreadable. Else, if a
+      // SubagentStart launch record exists but the delegate was never observed (no transcript, no
+      // usable stop) → launch-record-expected-but-unobserved (the launcher-vs-observed gap). Else a
+      // bare delegate call without any launch record → delegate-call-without-child-transcript.
+      reason:
+        stop?.event === 'SubagentStop' && stop.agentTranscriptPath
+          ? 'delegate-transcript-unreadable'
+          : launched
+            ? 'launch-record-expected-but-unobserved'
+            : 'delegate-call-without-child-transcript',
       agent: { kind: 'subagent', subagentId: id },
       ...(stop ? { hookEvent: stop.event } : {}),
     });
@@ -506,6 +522,10 @@ function codexGaps(
       ...(blobName ? { blobName } : {}),
       ...(stop ? { hookEvent: stop.event } : {}),
     });
+  }
+  // P0.8 — colliding child session_meta.ids: surfaced rather than silently deduped.
+  for (const id of storage.duplicateChildSessionIds) {
+    gaps.push({ reason: 'duplicate-child-session-id', agent: { kind: 'subagent', subagentId: id } });
   }
   return gaps;
 }

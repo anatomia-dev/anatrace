@@ -48,7 +48,7 @@ describe('D2 — scrub is versioned + matches the crack3d canonical vocabulary',
     });
   }
   it('scrubFinding covers the finding message AND location.file', () => {
-    const f = scrubFinding({ message: 'edited /Users/rsmith/x.ts', location: { file: '/Users/rsmith/x.ts' } });
+    const f = scrubFinding({ message: 'edited /Users/dev/x.ts', location: { file: '/Users/dev/x.ts' } });
     expect(f.message).toBe('edited ∎path');
     expect(f.location?.file).toBe('∎path');
   });
@@ -58,7 +58,7 @@ describe('D2 — scrub is versioned + matches the crack3d canonical vocabulary',
 describe('D2 — buildDossier (said-vs-did; bounded scrubbed evidence; residue first-class)', () => {
   function sess(): ReturnType<typeof claudeAdapter.parse> {
     return claudeAdapter.parse([{ name: 'parent', bytes: enc(jsonl([
-      assistant([{ type: 'tool_use', name: 'Read', input: { file_path: '/Users/rsmith/.ana/build_report.md' } }], 'a1', '2026-06-08T00:00:01.000Z'),
+      assistant([{ type: 'tool_use', name: 'Read', input: { file_path: '/Users/dev/.ana/build_report.md' } }], 'a1', '2026-06-08T00:00:01.000Z'),
     ])) }]);
   }
   const mandate: Mandate = { schemaVersion: 1, framework: 'anatomia', claims: [readClaim] };

@@ -234,7 +234,7 @@ describe('D1-FILESCOPE — absolute non-worktree edits: repoRoot relativizes; un
   function mandate(): Mandate {
     return { schemaVersion: 1, framework: 'anatomia', claims: WL.map((p, i) => editPathsClaim(`fs${i}`, p)) };
   }
-  const REPO = '/Users/rsmith/Projects/anatomia_project/anatomia';
+  const REPO = '/Users/dev/Projects/anatomia_project/anatomia';
 
   it('(1) a non-worktree ABSOLUTE source edit WITH a supplied repoRoot → relativizes → matches the whitelist → NOT flagged', () => {
     // The whitelisted source, but edited via its ABSOLUTE path (Spike A: ~169/463 source edits).

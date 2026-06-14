@@ -154,7 +154,10 @@ function parseCodex(group: NamedBlob[]): NormalizedSession | null {
 
       if (type === 'event_msg' && ptype === 'token_count') {
         if (!includeUsage) {
-          capabilities.tokenTotalSuspect = true;
+          // Child/delegate lanes' usage is INTENTIONALLY excluded (only the root lane's tokens
+          // count). This is normal multi-file Codex, NOT a monotonicity break — do NOT flag the
+          // parse suspect for it (P0.8: that would mass-abstain every multi-file Codex session at
+          // the absence gate). `tokenTotalSuspect` is reserved for a REAL cumulative regression below.
           return;
         }
         const info = rObj(payload, 'info');
