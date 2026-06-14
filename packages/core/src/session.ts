@@ -5,6 +5,34 @@ export type Harness = 'claude' | 'codex';
 /** Per-event attribution. `subagentId` (= the subagent file's agentId) is 100%-derivable. */
 export type AgentRef = { kind: 'root' } | { kind: 'subagent'; subagentId: string };
 
+// Canonical AgentRef-identity helpers (P0.4 — collapsed from 6 per-module copies: agentKey×3,
+// uniqueAgents×3, and the sameAgent/sameLane/sameAgentRef predicate ×3). Internal — NOT re-exported
+// from index.ts (the public surface stays minimal).
+export function agentKey(agent: AgentRef): string {
+  return agent.kind === 'root' ? 'root' : `subagent:${agent.subagentId}`;
+}
+export function sameAgentRef(a: AgentRef, b: AgentRef): boolean {
+  if (a.kind !== b.kind) return false;
+  return a.kind === 'root' || a.subagentId === (b as { subagentId: string }).subagentId;
+}
+/** Order-PRESERVING dedup (timeline order kept) — the verdict layer's variant. */
+export function uniqueAgents(agents: AgentRef[]): AgentRef[] {
+  const seen = new Set<string>();
+  return agents.filter((agent) => {
+    const key = agentKey(agent);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** SORTED dedup (deterministic by agentKey) — the lineage / coverage variant. NOT the same as
+ *  {@link uniqueAgents}: these two genuinely differ (order-preserving vs sorted), so they stay as two
+ *  named helpers rather than being forced into one. */
+export function uniqueAgentsSorted(agents: AgentRef[]): AgentRef[] {
+  return uniqueAgents(agents).sort((a, b) => agentKey(a).localeCompare(agentKey(b)));
+}
+
 /**
  * Subagent metadata. agentId/agentType/description are 100%-present (sidecar + filename).
  * @experimental dispatchToolUseId — the link to the dispatching `Agent` call — is present

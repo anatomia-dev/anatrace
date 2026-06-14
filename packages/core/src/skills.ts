@@ -1,4 +1,5 @@
 import type { NormalizedSession, SkillSource, AgentRef } from './session.js';
+import { sameAgentRef as sameAgent } from './session.js';
 
 /**
  * Announce-string skill derive (B2 / OQ5) — the PORTABLE, LOW-CONFIDENCE cross-harness
@@ -39,12 +40,6 @@ export interface SkillInvocation {
  */
 export function skillsInvoked(session: NormalizedSession): SkillInvocation[] {
   return collectSkills(session.events.filter((e) => e.type === 'skill'));
-}
-
-/** Are two `AgentRef`s the same timeline? (root↔root, or the same subagentId.) */
-function sameAgent(a: AgentRef, b: AgentRef): boolean {
-  if (a.kind !== b.kind) return false;
-  return a.kind === 'root' || a.subagentId === (b as { subagentId: string }).subagentId;
 }
 
 /**

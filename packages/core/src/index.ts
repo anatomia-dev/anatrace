@@ -12,9 +12,6 @@ export type {
   Tree,
   ParserCapability,
   ContentResolver,
-  JudgeInput,
-  JudgeOutput,
-  JudgeFn,
   Capabilities,
   RuleOptions,
   Rule,
@@ -111,11 +108,8 @@ export type {
 } from './session.js';
 
 // Harness version support (P0.6) — the coarse catastrophic-floor + feature-presence helpers.
-export {
-  harnessVersionStatus,
-  harnessVersionAtLeast,
-  parseSemver,
-} from './harness-support.js';
+// `parseSemver` is INTERNAL (used only within harness-support); not part of the public surface.
+export { harnessVersionStatus, harnessVersionAtLeast } from './harness-support.js';
 export type { HarnessVersionStatus, Semver } from './harness-support.js';
 
 // The multi-blob adapter contract (Item 2).
@@ -127,7 +121,8 @@ export { canonicalSort } from './order.js';
 
 // The SkillEvent consumer (B2) — render/rule reader, never a ProvenanceCounts field.
 // FI-15: `skillsInvokedInScope` is the lane-aware (concurrency-correct) variant for verdicts.
-export { skillsInvoked, skillsInvokedInScope, matchAnnouncedSkills } from './skills.js';
+// `matchAnnouncedSkills` is INTERNAL (the Codex adapter imports it directly); not public surface.
+export { skillsInvoked, skillsInvokedInScope } from './skills.js';
 export type { SkillInvocation } from './skills.js';
 export type { SkillSource } from './session.js';
 
@@ -149,7 +144,8 @@ export { classifyEditPath, normalizeEditPath } from './file-scope.js';
 export type { PathClass } from './file-scope.js';
 
 // The dossier (D2) — said-vs-did + bounded scrubbed evidence; standalone buildDossier (FI-5).
-export { buildDossier, buildZeroMandateWedge, DOSSIER_SCHEMA_VERSION, EVIDENCE_CAP } from './dossier.js';
+// `buildZeroMandateWedge` had zero consumers (core, CLI, action, anatomia) — removed from surface.
+export { buildDossier, DOSSIER_SCHEMA_VERSION, EVIDENCE_CAP } from './dossier.js';
 export type { Dossier, DossierClaim, DossierClaimSlice } from './dossier.js';
 
 // The canonical scrub (D2) — versioned, bit-identical to crack3d; covers Finding output.
@@ -161,7 +157,6 @@ export {
   checkIdForClaim,
   severityForVerdict,
   complianceFindings,
-  unknownComplianceKeys,
   complianceKey,
   COMPLIANCE_CHECK_IDS,
 } from './compliance-config.js';
@@ -178,10 +173,12 @@ export { COMPLIANCE_RULES, COMPLIANCE_PACK } from './rules/compliance.js';
 export { runCompliance } from './compliance.js';
 export type { ComplianceResult } from './compliance.js';
 
-// The LLM-judge SEAM (D-HOOK) — DESIGNED, not wired. adjudicate is a SEPARATE entrypoint.
-// (JudgeInput/JudgeOutput are re-exported via types.js as the published seam names.)
-export { adjudicate, buildHookRequests } from './hook.js';
-export type { JudgeVerdict, HookRequest, JudgeBudget } from './hook.js';
+// The LLM-judge SEAM (D-HOOK) — QUARANTINED off the public zero-LLM surface (P0.4). The LLM call
+// site `adjudicate` and the Judge* I/O types are NOT public: the verdict layer ships zero LLM. Only
+// the DETERMINISTIC residue manifest stays consumable. `Config.judge` remains an internal injection
+// seam (bundled, non-exported) — there is no public entrypoint that can call an LLM.
+export { buildHookRequests } from './hook.js';
+export type { HookRequest } from './hook.js';
 
 // The transcript-content resolver (B4) — injectable content source, no disk in core.
 export { transcriptContentResolver } from './content.js';
@@ -208,7 +205,8 @@ export { parseSession } from './parse.js';
 // fully severing that is a separate "should `Report` expose meta-facts?" decision for P0.4).
 // `meta/lane.ts` is SPINE (`verdict.ts` imports `laneCapture`/`isGradeableCapture`) and STAYS public.
 export { rootLaneEvents, splitByLane, isRootLane } from './meta/lane.js';
-export { getRule, defaultPack, allRules, resolvePack } from './registry.js';
+// `getRule`/`allRules` had zero consumers (core/CLI/action/anatomia) — removed from the surface.
+export { defaultPack, resolvePack } from './registry.js';
 export { resolveSeverity, resolveOptions, applyIgnores } from './config.js';
 export { FRICTION_RULES, FRICTION_PACK, FRICTION_DEFAULT_SEVERITY } from './rules/friction.js';
 
