@@ -25,3 +25,12 @@ The lock (`p04-public-api-lock.test.ts`):
 Deferred (noted, non-blocking): migrating the layout-obsolete `codex-subagent-storage` corpus fixture
 (CC-style `subagents/` storage) to the real Codex `rollout-*` layout — needs a corpus-loader change +
 test updates; discovery (the layout-sensitive path) is already covered by the Step-6 real-layout test.
+
+Additional de-exports before the freeze (zero consumers verified across core/CLI/action/anatomia):
+- QUARANTINED the LLM-judge cluster off the public zero-LLM surface: `adjudicate` + `JudgeFn` /
+  `JudgeInput` / `JudgeOutput` / `JudgeVerdict` / `JudgeBudget`. The deterministic
+  `buildHookRequests` / `HookRequest` residue stays public; `Config.judge` remains an internal
+  (bundled, non-exported) injection seam — there is no public entrypoint that can call an LLM.
+- Removed dead public symbols `getRule`, `allRules`, `unknownComplianceKeys`.
+
+The frozen export snapshot is now 171 identifiers (`test/fixtures/public-api.snapshot`).

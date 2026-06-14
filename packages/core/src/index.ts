@@ -12,9 +12,6 @@ export type {
   Tree,
   ParserCapability,
   ContentResolver,
-  JudgeInput,
-  JudgeOutput,
-  JudgeFn,
   Capabilities,
   RuleOptions,
   Rule,
@@ -160,7 +157,6 @@ export {
   checkIdForClaim,
   severityForVerdict,
   complianceFindings,
-  unknownComplianceKeys,
   complianceKey,
   COMPLIANCE_CHECK_IDS,
 } from './compliance-config.js';
@@ -177,10 +173,12 @@ export { COMPLIANCE_RULES, COMPLIANCE_PACK } from './rules/compliance.js';
 export { runCompliance } from './compliance.js';
 export type { ComplianceResult } from './compliance.js';
 
-// The LLM-judge SEAM (D-HOOK) — DESIGNED, not wired. adjudicate is a SEPARATE entrypoint.
-// (JudgeInput/JudgeOutput are re-exported via types.js as the published seam names.)
-export { adjudicate, buildHookRequests } from './hook.js';
-export type { JudgeVerdict, HookRequest, JudgeBudget } from './hook.js';
+// The LLM-judge SEAM (D-HOOK) — QUARANTINED off the public zero-LLM surface (P0.4). The LLM call
+// site `adjudicate` and the Judge* I/O types are NOT public: the verdict layer ships zero LLM. Only
+// the DETERMINISTIC residue manifest stays consumable. `Config.judge` remains an internal injection
+// seam (bundled, non-exported) — there is no public entrypoint that can call an LLM.
+export { buildHookRequests } from './hook.js';
+export type { HookRequest } from './hook.js';
 
 // The transcript-content resolver (B4) — injectable content source, no disk in core.
 export { transcriptContentResolver } from './content.js';
@@ -207,7 +205,8 @@ export { parseSession } from './parse.js';
 // fully severing that is a separate "should `Report` expose meta-facts?" decision for P0.4).
 // `meta/lane.ts` is SPINE (`verdict.ts` imports `laneCapture`/`isGradeableCapture`) and STAYS public.
 export { rootLaneEvents, splitByLane, isRootLane } from './meta/lane.js';
-export { getRule, defaultPack, allRules, resolvePack } from './registry.js';
+// `getRule`/`allRules` had zero consumers (core/CLI/action/anatomia) — removed from the surface.
+export { defaultPack, resolvePack } from './registry.js';
 export { resolveSeverity, resolveOptions, applyIgnores } from './config.js';
 export { FRICTION_RULES, FRICTION_PACK, FRICTION_DEFAULT_SEVERITY } from './rules/friction.js';
 
