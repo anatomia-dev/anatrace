@@ -4,6 +4,26 @@ Thanks for your interest. anatrace is in an early foundation phase — the engin
 isn't built yet, so the most useful contributions right now are issues and
 discussion. Code contributions are welcome once the engine milestone opens.
 
+## Canonical repository
+
+There is exactly **one** canonical source of truth:
+[`anatomia-dev/anatrace`](https://github.com/anatomia-dev/anatrace), checked out
+on `main`. Develop from a **single standalone clone** of it.
+
+Do **not** keep multiple long-lived local checkouts of this repo, and do not
+share one `.git` across several working directories via `git worktree` for
+day-to-day work. Divergent checkouts have caused real confusion here — an
+older tree can read like canon while sitting commits behind `main`. If you need
+isolation for a risky change, branch within your single clone; remove any
+scratch worktrees as soon as the branch merges (`git worktree prune`).
+
+To verify you are on canon:
+
+```bash
+git remote -v          # one remote: anatomia-dev/anatrace
+git worktree list      # one entry, your clone, on main
+```
+
 ## Developer Certificate of Origin (DCO)
 
 This project uses a **DCO**, not a CLA. You certify that you wrote the patch (or
