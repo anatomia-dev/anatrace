@@ -1,5 +1,5 @@
 ---
-"anatrace-core": patch
+"anatrace-core": minor
 ---
 
 Close the cardinal-sin absence path: the shared absence gate (Phase 0 P0.8).

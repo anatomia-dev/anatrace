@@ -63,6 +63,22 @@ These two invariants are the brand. CI enforces both:
    key order, no `cost_usd`) and locked by a golden-fixture test. Do not reorder
    or add fields to those without a deliberate, reviewed contract change.
 
+## Versioning & releases
+
+- **Independent versioning** (`.changeset/config.json` → `"fixed": []`, `"linked": []`). `anatrace`
+  (CLI) and `anatrace-core` (engine) version **separately** — an embedder pins `anatrace-core`, not
+  the CLI, so they must not move in lockstep.
+- **No public-API change without a changeset — and pick the right bump level.** Two distinct
+  guardrails, plus one human judgement:
+  - CI's `changeset status` enforces that a changed package carries a changeset (**presence**).
+  - The export-snapshot + `VerdictReason`/`LineageGapReason` value-locks
+    (`test/p04-public-api-lock.test.ts`) fail on a **surface change** until the snapshot is
+    deliberately regenerated — that's your signal the change is real.
+  - **Neither tool verifies the bump LEVEL.** Removing/renaming a public export or changing verdict
+    output is **breaking** → `minor` pre-1.0 (`major` post-1.0), not `patch`. That call is yours at
+    review time. A patch bump on a breaking change is a semver lie — and on a verifier whose brand is
+    "don't overclaim," that's a release blocker.
+
 ## Code style
 
 - TypeScript strict (see `tsconfig.base.json`), ESM-only.

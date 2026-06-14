@@ -388,7 +388,7 @@ describe('Phase 2 lineage extraction', () => {
       expect.objectContaining({
         reason: 'delegate-transcript-unreadable',
         agent: { kind: 'subagent', subagentId: 'codex-child-storage' },
-        blobName: 'subagents/agent-codex-child-storage.jsonl',
+        blobName: 'children/rollout-codex-child-storage.jsonl',
       }),
     ]);
   });

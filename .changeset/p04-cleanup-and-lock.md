@@ -1,5 +1,5 @@
 ---
-"anatrace-core": patch
+"anatrace-core": minor
 ---
 
 Cleanup sweep + the package-boundary lock (Phase 0 P0.4/P0.9, final Phase-0 step).

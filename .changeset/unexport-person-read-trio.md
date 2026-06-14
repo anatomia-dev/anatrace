@@ -1,5 +1,5 @@
 ---
-"anatrace-core": patch
+"anatrace-core": minor
 ---
 
 Un-export the person-read meta-fact feeders from core's public API (Phase 0 P0.0).

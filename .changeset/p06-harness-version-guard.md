@@ -1,6 +1,6 @@
 ---
-"anatrace-core": patch
-"anatrace": patch
+"anatrace-core": minor
+"anatrace": minor
 ---
 
 Wire the observed harness version into a fail-loud signal + stop the CC `toolUseId`-drift false gap

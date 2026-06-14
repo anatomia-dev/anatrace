@@ -36,6 +36,22 @@ jobs:
       # intentional absence of CJS/legacy resolution: node10 (no-resolution) and
       # CJS-require-resolves-to-ESM (Node >=22 handles require(ESM) natively).
       - run: cd packages/core && npx @arethetypeswrong/cli --pack --ignore-rules cjs-resolves-to-esm no-resolution
+  changeset-required:
+    name: changeset-required
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # No package / public-API change without a changeset. The export-snapshot + reason value-locks
+      # give this teeth: any surface change fails the snapshot test until deliberately regenerated,
+      # which signals a real change that must carry a changeset. `changeset status` fails when a
+      # changed package has no changeset.
+      - run: pnpm exec changeset status --since=origin/main
   bunx-smoke:
     name: bunx-smoke
     runs-on: ubuntu-latest
