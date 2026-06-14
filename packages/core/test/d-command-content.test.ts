@@ -122,18 +122,19 @@ describe('command-content evaluator (forbidden-command direction)', () => {
     });
   });
 
-  it('cross-harness — the forbidden-command direction is real on Codex (exec_command emits a command)', () => {
-    // A minimal Codex session that runs a forbidden command via exec_command.
+  it('cross-harness — the forbidden-command direction is real on Codex via the REAL `cmd` key', () => {
+    // A real Codex exec_command carries the command under `cmd` (cli_version 0.135+), NOT `command`.
+    // (This test previously used a fabricated `command` key under an `if (s)` soft-skip with a
+    // verdict-permissive assertion — it could not fail, which is how the cmd-key bug shipped.)
     const codexLines = jsonl([
-      { type: 'session_meta', payload: { id: 'c1', cwd: '/r', originator: 'codex' } },
-      { type: 'response_item', payload: { type: 'function_call', name: 'exec_command', arguments: JSON.stringify({ command: 'git rebase origin/main' }), call_id: 'x1' } },
+      { type: 'session_meta', payload: { id: 'c1', cwd: '/r', originator: 'codex', cli_version: '0.135.0' } },
+      { type: 'response_item', payload: { type: 'function_call', name: 'exec_command', arguments: JSON.stringify({ cmd: 'git rebase origin/main', workdir: '/r' }), call_id: 'x1' } },
     ]);
     const s = codexAdapter.parse([{ name: 'rollout.jsonl', bytes: enc(codexLines) }]);
-    if (s) {
-      const v = verdictForClaim(forbiddenCommandClaim('git rebase'), s);
-      // Either it parsed the exec_command (→ violated) or the harness shape differs; never a false satisfied with a real hit present.
-      expect(['violated', 'satisfied', 'unverifiable']).toContain(v.status);
-    }
+    expect(s).not.toBeNull();
+    const v = verdictForClaim(forbiddenCommandClaim('git rebase'), s!);
+    expect(v).toMatchObject({ status: 'violated', reason: 'predicate-not-matched' });
+    expect(v.evidence.length).toBeGreaterThan(0);
   });
 });
 
