@@ -1,6 +1,6 @@
 ---
-"anatrace-core": patch
-"anatrace": patch
+"anatrace-core": minor
+"anatrace": minor
 ---
 
 Feeders fail loud (Phase 0 P0.3) — silent under-extraction becomes a visible, typed gap.

@@ -1,5 +1,5 @@
 ---
-"anatrace-core": patch
+"anatrace-core": minor
 ---
 
 Fix two shipped false-PASS-class defects in the verdict layer (Phase 0 P0.2).

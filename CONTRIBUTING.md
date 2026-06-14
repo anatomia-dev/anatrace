@@ -68,11 +68,16 @@ These two invariants are the brand. CI enforces both:
 - **Independent versioning** (`.changeset/config.json` → `"fixed": []`, `"linked": []`). `anatrace`
   (CLI) and `anatrace-core` (engine) version **separately** — an embedder pins `anatrace-core`, not
   the CLI, so they must not move in lockstep.
-- **No public-API change without a changeset.** The public surface of `anatrace-core` is frozen by an
-  export-snapshot test, and the `VerdictReason` / `LineageGapReason` vocabularies by value-locks
-  (`test/p04-public-api-lock.test.ts`). A surface change fails that test until the snapshot is
-  regenerated — which is your signal that the change is real and needs a changeset. CI enforces
-  `changeset status` on every PR.
+- **No public-API change without a changeset — and pick the right bump level.** Two distinct
+  guardrails, plus one human judgement:
+  - CI's `changeset status` enforces that a changed package carries a changeset (**presence**).
+  - The export-snapshot + `VerdictReason`/`LineageGapReason` value-locks
+    (`test/p04-public-api-lock.test.ts`) fail on a **surface change** until the snapshot is
+    deliberately regenerated — that's your signal the change is real.
+  - **Neither tool verifies the bump LEVEL.** Removing/renaming a public export or changing verdict
+    output is **breaking** → `minor` pre-1.0 (`major` post-1.0), not `patch`. That call is yours at
+    review time. A patch bump on a breaking change is a semver lie — and on a verifier whose brand is
+    "don't overclaim," that's a release blocker.
 
 ## Code style
 
