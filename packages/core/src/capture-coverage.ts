@@ -1,4 +1,5 @@
 import type { AgentRef } from './session.js';
+import { agentKey, uniqueAgentsSorted as uniqueAgents } from './session.js';
 import type { LineageExtraction } from './lineage.js';
 
 /**
@@ -56,21 +57,6 @@ export interface MandateEvaluationContext {
   lineage?: LineageExtraction;
 }
 
-function agentKey(agent: AgentRef): string {
-  return agent.kind === 'root' ? 'root' : `subagent:${agent.subagentId}`;
-}
-
-function uniqueAgents(agents: AgentRef[]): AgentRef[] {
-  const seen = new Set<string>();
-  const out: AgentRef[] = [];
-  for (const agent of agents) {
-    const key = agentKey(agent);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(agent);
-  }
-  return out.sort((a, b) => agentKey(a).localeCompare(agentKey(b)));
-}
 
 /**
  * Reconcile raw launcher intent with observed checked lanes. Pure: no filesystem, clock,

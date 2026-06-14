@@ -28,6 +28,7 @@ import type {
   SessionEventBody,
   AgentRef,
 } from './session.js';
+import { agentKey, uniqueAgents, sameAgentRef } from './session.js';
 import type { ContentResolver } from './types.js';
 import type {
   CaptureCoverage,
@@ -139,20 +140,6 @@ interface SubjectResolution {
   events: SessionEvent[];
   agents: AgentRef[];
   delegateComplete: boolean;
-}
-
-function agentKey(agent: AgentRef): string {
-  return agent.kind === 'root' ? 'root' : `subagent:${agent.subagentId}`;
-}
-
-function uniqueAgents(agents: AgentRef[]): AgentRef[] {
-  const seen = new Set<string>();
-  return agents.filter((agent) => {
-    const key = agentKey(agent);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function expandDelegates(
@@ -425,6 +412,10 @@ function codexBlindable(session: NormalizedSession): boolean {
   return session.harness === 'codex';
 }
 
+// FI-17 — the SINGLE SOURCE of matcher totality. `isComparableMatcher`, `matchStr`, and
+// `evalMessageText` all key off these so the wall can never drift out of lockstep (pinned by the
+// matcher-totality value-lock test). `matches`/`gte`/`lte` are deliberately absent → unverifiable.
+const COMPARABLE_MATCHERS = new Set(['contains', 'not_contains', 'equals', 'not_equals', 'exists']);
 const NEGATIVE_MATCHERS = new Set(['not_contains', 'not_equals']);
 
 /**
@@ -435,13 +426,7 @@ const NEGATIVE_MATCHERS = new Set(['not_contains', 'not_equals']);
  * `satisfied`/`violated`. Checked ONCE per claim at evaluator entry (not per element).
  */
 function isComparableMatcher(matcher: string): boolean {
-  return (
-    matcher === 'contains' ||
-    matcher === 'not_contains' ||
-    matcher === 'equals' ||
-    matcher === 'not_equals' ||
-    matcher === 'exists'
-  );
+  return COMPARABLE_MATCHERS.has(matcher);
 }
 
 // ─── read-paths (verify-independence) ────────────────────────────────────────────────────
@@ -695,9 +680,10 @@ function evalMessageText(
   const role = 'role' in predicate ? predicate.role : undefined;
   const needle = String(predicate.value ?? '');
   const matcher = predicate.matcher;
-  // FI-17 — matcher totality: `matches`/`gte`/`lte` are not mechanically comparable on
-  // message-text (RegExp/numeric grep would re-open the literal-only bright line) → unverifiable.
-  if (matcher !== 'contains' && matcher !== 'not_contains' && matcher !== 'equals' && matcher !== 'not_equals') {
+  // FI-17 — matcher totality from the SINGLE source. message-text supports the comparable matchers
+  // EXCEPT `exists` (a literal-only channel; `matches`/`gte`/`lte` would re-open the bright line) →
+  // anything else is `unverifiable`, never a silent verdict.
+  if (!COMPARABLE_MATCHERS.has(matcher) || matcher === 'exists') {
     return verdict(claim.id, 'unverifiable', 'content-unresolvable');
   }
   const isNegative = NEGATIVE_MATCHERS.has(matcher);
@@ -887,7 +873,6 @@ function evalEditPaths(
   // Standalone (single-claim) path: the whitelist is this claim's own value. The SET UNION
   // over same-`source` claims is assembled by {@link verdictsForMandate}, which knows the
   // full mandate and routes file-scope claims directly to {@link fileScopeVerdict}.
-  const sourceKey = claimSourceKey(claim);
   const whitelist = new Set<string>();
   const ownValue = String(claim.predicate?.value ?? '');
   // Normalize the contract path with the SAME root as the edits, so both sides match (step-1
@@ -895,7 +880,6 @@ function evalEditPaths(
   if (ownValue) whitelist.add(normalizeEditPath(ownValue, repoRoot));
   return fileScopeVerdict(
     claim.id,
-    sourceKey,
     whitelist,
     session,
     sink,
@@ -979,7 +963,6 @@ function claimBatchKey(claim: MandateClaim): string {
  */
 export function fileScopeVerdict(
   claimId: string,
-  _sourceKey: string,
   whitelist: Set<string>,
   session: NormalizedSession,
   sink: FileScopeFindingSink | undefined,
@@ -1078,10 +1061,6 @@ function resolveWindow(
   return lane.slice(openIdx, closeIdx);
 }
 
-function sameAgentRef(a: AgentRef, b: AgentRef): boolean {
-  if (a.kind !== b.kind) return false;
-  return a.kind === 'root' || a.subagentId === (b as { subagentId: string }).subagentId;
-}
 
 // ─── matchers ────────────────────────────────────────────────────────────────────────────
 function matchStr(haystack: string, matcher: string, needle: string): boolean {
@@ -1180,7 +1159,6 @@ export function verdictsForMandate(
         claim.predicate.target === 'edit-paths'
           ? fileScopeVerdict(
               claim.id,
-              key,
               whitelist,
               scopedSession,
               localSink,

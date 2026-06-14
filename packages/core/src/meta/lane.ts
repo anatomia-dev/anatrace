@@ -1,4 +1,5 @@
 import type { NormalizedSession, SessionEvent, AgentRef } from '../session.js';
+import { sameAgentRef as sameLane } from '../session.js';
 
 /**
  * S2 — the ROOT-LANE projection (meta-facts ADD-1 foundation).
@@ -74,12 +75,6 @@ export type LaneCapture =
 /** The capture states from which an absent `required` obligation may honestly flip to `violated`. */
 export function isGradeableCapture(capture: LaneCapture): boolean {
   return capture === 'complete' || capture === 'compacted-in-place';
-}
-
-/** Are two `AgentRef`s the same lane? (root↔root, or the same subagentId.) */
-function sameLane(a: AgentRef, b: AgentRef): boolean {
-  if (a.kind !== b.kind) return false;
-  return a.kind === 'root' || a.subagentId === (b as { subagentId: string }).subagentId;
 }
 
 /**

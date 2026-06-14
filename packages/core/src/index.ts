@@ -111,11 +111,8 @@ export type {
 } from './session.js';
 
 // Harness version support (P0.6) — the coarse catastrophic-floor + feature-presence helpers.
-export {
-  harnessVersionStatus,
-  harnessVersionAtLeast,
-  parseSemver,
-} from './harness-support.js';
+// `parseSemver` is INTERNAL (used only within harness-support); not part of the public surface.
+export { harnessVersionStatus, harnessVersionAtLeast } from './harness-support.js';
 export type { HarnessVersionStatus, Semver } from './harness-support.js';
 
 // The multi-blob adapter contract (Item 2).
@@ -127,7 +124,8 @@ export { canonicalSort } from './order.js';
 
 // The SkillEvent consumer (B2) — render/rule reader, never a ProvenanceCounts field.
 // FI-15: `skillsInvokedInScope` is the lane-aware (concurrency-correct) variant for verdicts.
-export { skillsInvoked, skillsInvokedInScope, matchAnnouncedSkills } from './skills.js';
+// `matchAnnouncedSkills` is INTERNAL (the Codex adapter imports it directly); not public surface.
+export { skillsInvoked, skillsInvokedInScope } from './skills.js';
 export type { SkillInvocation } from './skills.js';
 export type { SkillSource } from './session.js';
 
@@ -149,7 +147,8 @@ export { classifyEditPath, normalizeEditPath } from './file-scope.js';
 export type { PathClass } from './file-scope.js';
 
 // The dossier (D2) — said-vs-did + bounded scrubbed evidence; standalone buildDossier (FI-5).
-export { buildDossier, buildZeroMandateWedge, DOSSIER_SCHEMA_VERSION, EVIDENCE_CAP } from './dossier.js';
+// `buildZeroMandateWedge` had zero consumers (core, CLI, action, anatomia) — removed from surface.
+export { buildDossier, DOSSIER_SCHEMA_VERSION, EVIDENCE_CAP } from './dossier.js';
 export type { Dossier, DossierClaim, DossierClaimSlice } from './dossier.js';
 
 // The canonical scrub (D2) — versioned, bit-identical to crack3d; covers Finding output.

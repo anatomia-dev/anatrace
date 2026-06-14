@@ -2,6 +2,7 @@ import type { NamedBlob } from './adapter.js';
 import { parseJsonObject, readJsonlLines } from './adapter.js';
 import type { AgentRef, Harness, NormalizedSession, SessionEvent } from './session.js';
 import { harnessVersionAtLeast } from './harness-support.js';
+import { agentKey, uniqueAgentsSorted as uniqueAgents } from './session.js';
 
 export type LineageGapReason =
   | 'delegate-call-without-child-transcript'
@@ -95,21 +96,6 @@ export interface LineageExtraction {
   gaps: LineageGap[];
 }
 
-function agentKey(agent: AgentRef): string {
-  return agent.kind === 'root' ? 'root' : `subagent:${agent.subagentId}`;
-}
-
-function uniqueAgents(agents: AgentRef[]): AgentRef[] {
-  const seen = new Set<string>();
-  const out: AgentRef[] = [];
-  for (const agent of agents) {
-    const key = agentKey(agent);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(agent);
-  }
-  return out.sort((a, b) => agentKey(a).localeCompare(agentKey(b)));
-}
 
 function lanesOf(session: NormalizedSession): AgentRef[] {
   return uniqueAgents(session.events.map((event) => event.agent));
