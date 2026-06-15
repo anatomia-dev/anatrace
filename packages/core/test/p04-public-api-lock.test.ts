@@ -20,12 +20,18 @@ import { claudeAdapter } from '../src/adapters/claude.js';
 const SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const read = (rel: string): string => fs.readFileSync(path.join(SRC, rel), 'utf8');
 
-/** Extract exported identifiers (value + type, alias-resolved to the exported name) from a module. */
+/**
+ * Extract exported identifiers from a module — alias-resolved to the exported name. Covers ALL forms,
+ * so no export style bypasses the freeze: `export { … }` / `export type { … }` (brace), inline
+ * `export [async] const|function|class|interface|type|enum X`, and a `export * from` re-export (which
+ * cannot be enumerated statically, so it is surfaced as a `*:<module>` token that the snapshot must
+ * account for — i.e. it fails the freeze until handled).
+ */
 function exportedNames(source: string): string[] {
   const names = new Set<string>();
-  const re = /export\s+(?:type\s+)?\{([^}]*)\}/g;
+  const brace = /export\s+(?:type\s+)?\{([^}]*)\}/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(source))) {
+  while ((m = brace.exec(source))) {
     for (const raw of m[1]!.split(',')) {
       const part = raw.trim();
       if (!part) continue;
@@ -33,6 +39,10 @@ function exportedNames(source: string): string[] {
       names.add((as[1] ?? as[0]!).trim());
     }
   }
+  const inline = /export\s+(?:async\s+)?(?:const|function|class|interface|enum|type)\s+([A-Za-z0-9_$]+)/g;
+  while ((m = inline.exec(source))) names.add(m[1]!);
+  const star = /export\s+\*\s+from\s+['"]([^'"]+)['"]/g;
+  while ((m = star.exec(source))) names.add(`*:${m[1]!}`);
   return [...names].filter(Boolean).sort();
 }
 

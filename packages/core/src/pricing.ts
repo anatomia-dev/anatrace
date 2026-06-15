@@ -12,7 +12,7 @@
 import type { TokenCounts } from './provenance.js';
 
 /** The version stamp for the bundled price table. Bump when any rate changes. */
-export const PRICE_TABLE_VERSION = '2026-06-08';
+export const PRICE_TABLE_VERSION = '2026-06-14';
 
 /**
  * One model's price row, in USD per 1,000,000 tokens of each token type.
@@ -43,7 +43,9 @@ export const PRICES: PriceEntry[] = [
   { model: 'claude-opus-4-6', input: 5, output: 25, cache_create: 6.25, cache_read: 0.5 },
   { model: 'claude-sonnet-4-6', input: 3, output: 15, cache_create: 3.75, cache_read: 0.3 },
   { model: 'claude-haiku-4-5', input: 1, output: 5, cache_create: 1.25, cache_read: 0.1 },
-  { model: 'gpt-5.5', input: 1.25, output: 10, cache_create: 0, cache_read: 0.125 },
+  // GPT-5.5 standard tier, verified 2026-06-14 against developers.openai.com/api/docs/pricing:
+  // $5.00 input / $0.50 cached input / $30.00 output per 1M. (No separate cache-write charge.)
+  { model: 'gpt-5.5', input: 5, output: 30, cache_create: 0, cache_read: 0.5 },
 ];
 
 /** The result of a cost computation: the estimate plus the table version used. */

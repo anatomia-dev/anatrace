@@ -37,8 +37,9 @@ firing on nearly every real session) and it is **not a trust signal**: "within r
 3. **`parseHealth` → `session-parse-suspect`.** `parseHealth` is pinned on the session at parse time;
    the gating signal is `inputNonEmpty && structuredEventCount === 0` (a **non-empty** transcript that
    parsed to **zero** structured events — a likely within-range misparse). `tokenTotalSuspect` is a
-   **non-gating** breadcrumb only: it also flips on the intentional multi-file Codex child-usage
-   exclusion, so gating on it would mass-abstain every multi-file Codex session. When the gating signal
+   **non-gating** breadcrumb only: a cumulative-token-fold regression is not event loss (the timeline
+   can be fully present while token totals don't fold monotonically), so it must not abstain an
+   absence verdict — only zero structured events does. When the gating signal
    trips, the **shared absence gate** resolves absence-based (forbidden/negative) verdicts to
    `unverifiable(session-parse-suspect)` — **never `satisfied`** — so a renamed event type can't make a
    `not_contains "git push --force"` check read "no events" as "compliant." A legitimately short but
