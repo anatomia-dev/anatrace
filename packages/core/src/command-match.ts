@@ -107,7 +107,8 @@ function lex(command: string): Segment[] {
       if (end === -1) throw new ParseAmbiguity('unterminated $\'\' quote');
       curSurface += command.slice(i + 2, end);
       started = true;
-      i = end + 2;
+      i = end + 1; // `end` is the CLOSING quote; +1 lands just after it. (Was +2 — it swallowed the next
+      //              char, so `git $'push' --force` mis-read as `git push--force` and FALSE-PASSed.)
       continue;
     }
     // Double quotes: contents kept; `$…`/`$(…)`/backtick inside still expand -> WILD.
