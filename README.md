@@ -72,10 +72,12 @@ the headline).
 
 - **Compliance verdicts** — given a mandate, anatrace emits per-claim
   deterministic verdicts (`satisfied` / `violated` / `unverifiable`) with a
-  closed, machine-readable reason. **The public verdict surface ships ZERO LLM**:
-  there is no judge in the published API, so a verdict is byte-reproducible by
-  someone who doesn't trust you. (A consumer may inject their own judge as an
-  internal opt-in seam; it is not part of the supported surface and never gates.)
+  closed, machine-readable reason. **Zero LLM in the published verdict path**:
+  there is no judge in the published API or the `--json` envelope, so a verdict is
+  byte-reproducible by someone who doesn't trust you. (A consumer *may* inject their
+  own model to opine on the residue anatrace abstained on — opt-in, runs only on
+  already-`unverifiable` claims, labeled `source: 'llm'`, and it never gates. The
+  deterministic verdict path never calls it.)
   Absent or non-comparable signal is always `unverifiable`, never a guess — a
   verifier that over-claims is worse than none. Gate CI with `--ci` / `--fail-on`,
   or emit `--format sarif` for code scanning. **The CI gate fails the build only on

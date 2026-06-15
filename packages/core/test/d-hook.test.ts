@@ -3,6 +3,7 @@ import { claudeAdapter } from '../src/adapters/claude.js';
 import { analyze } from '../src/analyze.js';
 import { adjudicate, buildHookRequests, type JudgeVerdict } from '../src/hook.js';
 import { buildDossier } from '../src/dossier.js';
+import { runCompliance } from '../src/compliance.js';
 import { verdictsForMandate } from '../src/verdict.js';
 import type { Mandate, CheckableClaim, IntentClaim } from '../src/mandate.js';
 import type { Capabilities } from '../src/types.js';
@@ -25,27 +26,30 @@ const mandate: Mandate = { schemaVersion: 1, framework: 'x', claims: [intentClai
 
 // ─── THE E2 GUARD TEST (the bright line) ─────────────────────────────────────────────────
 describe('D-HOOK / E2 — analyze with vs without capabilities.judge is BYTE-IDENTICAL', () => {
-  it('Report.compliance + dossier are byte-identical with and without a judge in capabilities', () => {
+  it('the whole Report is byte-identical with and without a judge in capabilities', () => {
     const s = sess();
     const noJudge = analyze(s, undefined, undefined, mandate);
     const withJudge: Capabilities = { judge: async () => ({ claimId: 'intent-1', status: 'satisfied', source: 'llm', model: 'x', rationale: 'ok' } as JudgeVerdict) };
     const withJudgeReport = analyze(s, undefined, withJudge, mandate);
     expect(JSON.stringify(withJudgeReport.compliance)).toBe(JSON.stringify(noJudge.compliance));
-    expect(JSON.stringify(withJudgeReport.dossier)).toBe(JSON.stringify(noJudge.dossier));
-    expect(JSON.stringify(withJudgeReport.hookRequests)).toBe(JSON.stringify(noJudge.hookRequests));
-    // the whole Report is byte-identical — analyze NEVER touches the judge
+    // the whole Report is byte-identical — analyze NEVER touches the judge. (N4/Tier-3: dossier +
+    // hookRequests are no longer ON the Report; the internal seam is verified via runCompliance below.)
     expect(JSON.stringify(withJudgeReport)).toBe(JSON.stringify(noJudge));
+    expect('dossier' in withJudgeReport).toBe(false);
+    expect('hookRequests' in withJudgeReport).toBe(false);
   });
 });
 
 // ─── hookRequests = the routed-to-llm residue manifest ───────────────────────────────────
 describe('D-HOOK — hookRequests carries the routed-to-llm residue (zero LLM calls)', () => {
-  it('an intent claim (routed-to-llm) appears in hookRequests with a bounded slice', () => {
+  it('an intent claim (routed-to-llm) appears in the INTERNAL hookRequests seam with a bounded slice', () => {
     const s = sess();
-    const r = analyze(s, undefined, undefined, mandate);
+    // N4/Tier-3 — hookRequests is the quarantined judge's input: read it from runCompliance (the internal
+    // seam), NOT from the public Report / --json envelope (where it is deliberately absent).
+    const r = runCompliance(mandate, s);
     expect(r.hookRequests).toHaveLength(1);
-    expect(r.hookRequests![0].claimId).toBe('intent-1');
-    expect(r.hookRequests![0].input.claim.says).toBe('do good work');
+    expect(r.hookRequests[0]!.claimId).toBe('intent-1');
+    expect(r.hookRequests[0]!.input.claim.says).toBe('do good work');
   });
 
   it('buildHookRequests only includes routed-to-llm, not satisfied/violated/runtime', () => {
@@ -66,9 +70,9 @@ describe('D-HOOK — hookRequests carries the routed-to-llm residue (zero LLM ca
 describe('D-HOOK — adjudicate is a separate entrypoint (NOT inside analyze) + honors budget', () => {
   it('adjudicate walks hookRequests and calls the injected judge', async () => {
     const s = sess();
-    const r = analyze(s, undefined, undefined, mandate);
+    const r = runCompliance(mandate, s);
     const seen: string[] = [];
-    const out = await adjudicate(r.hookRequests!, async (input) => {
+    const out = await adjudicate(r.hookRequests, async (input) => {
       seen.push((input as { claim: { id: string } }).claim.id);
       return { claimId: 'intent-1', status: 'unverifiable', source: 'llm', model: 'haiku', rationale: 'unclear' };
     });
@@ -82,9 +86,9 @@ describe('D-HOOK — adjudicate is a separate entrypoint (NOT inside analyze) + 
       { ...intentClaim, id: 'i1' }, { ...intentClaim, id: 'i2' }, { ...intentClaim, id: 'i3' },
     ] };
     const s = sess();
-    const r = analyze(s, undefined, undefined, m);
+    const r = runCompliance(m, s);
     let calls = 0;
-    await adjudicate(r.hookRequests!, async () => { calls += 1; return { claimId: 'i', status: 'satisfied', source: 'llm', model: 'm', rationale: 'r' }; }, { maxClaims: 2 });
+    await adjudicate(r.hookRequests, async () => { calls += 1; return { claimId: 'i', status: 'satisfied', source: 'llm', model: 'm', rationale: 'r' }; }, { maxClaims: 2 });
     expect(calls).toBe(2);
   });
 });

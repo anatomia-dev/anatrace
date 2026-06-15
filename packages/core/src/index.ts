@@ -147,10 +147,11 @@ export type {
 export { classifyEditPath, normalizeEditPath } from './file-scope.js';
 export type { PathClass } from './file-scope.js';
 
-// The dossier (D2) — said-vs-did + bounded scrubbed evidence; standalone buildDossier (FI-5).
-// `buildZeroMandateWedge` had zero consumers (core, CLI, action, anatomia) — removed from surface.
-export { buildDossier, DOSSIER_SCHEMA_VERSION, EVIDENCE_CAP } from './dossier.js';
-export type { Dossier, DossierClaim, DossierClaimSlice } from './dossier.js';
+// The dossier (D2) — the said-vs-did + scrubbed-evidence LLM-JUDGE INPUT — is DEMOTED off the public
+// surface and the `--json` envelope in N4/Tier-3: it is an LLM-judge-shaped artifact, out of place on a
+// deterministic, zero-LLM-in-the-published-verdict-path API. `buildDossier`/`DOSSIER_SCHEMA_VERSION`/
+// `EVIDENCE_CAP` + the `Dossier*` types stay INTERNAL (still built by `runCompliance` for the quarantined
+// `Config.judge` seam, a config-flip away — never gating, never the deterministic verdict path).
 
 // The canonical scrub (D2) — versioned, bit-identical to crack3d; covers Finding output.
 export { scrubText, scrubFinding, scrubDeep, SCRUB_VERSION } from './scrub.js';
@@ -173,16 +174,17 @@ export type { SarifLog, SarifResult } from './sarif.js';
 // The opt-in compliance pack (D-CONFIG) — a SEPARATE pack, never unioned into recommended.
 export { COMPLIANCE_RULES, COMPLIANCE_PACK } from './rules/compliance.js';
 
-// The compliance orchestration (D3 glue) — verdicts + MASS Finding + dossier + hookRequests.
+// The compliance orchestration (D3 glue) — verdicts + MASS Finding + the internal dossier/hookRequests
+// seam. `runCompliance` still BUILDS the dossier + residue manifest (the quarantined judge's input),
+// but they are no longer attached to the public `Report` / `--json` envelope (N4/Tier-3).
 export { runCompliance } from './compliance.js';
 export type { ComplianceResult } from './compliance.js';
 
-// The LLM-judge SEAM (D-HOOK) — QUARANTINED off the public zero-LLM surface (P0.4). The LLM call
-// site `adjudicate` and the Judge* I/O types are NOT public: the verdict layer ships zero LLM. Only
-// the DETERMINISTIC residue manifest stays consumable. `Config.judge` remains an internal injection
-// seam (bundled, non-exported) — there is no public entrypoint that can call an LLM.
-export { buildHookRequests } from './hook.js';
-export type { HookRequest } from './hook.js';
+// The LLM-judge SEAM (D-HOOK) — QUARANTINED off the public zero-LLM surface (P0.4). The LLM call site
+// `adjudicate`, the Judge* I/O types, AND the `buildHookRequests`/`HookRequest` residue manifest are all
+// INTERNAL: the verdict layer ships zero LLM in the published verdict path. `Config.judge` remains an
+// internal injection seam (bundled, non-exported) — there is no public entrypoint that can call an LLM.
+// `buildHookRequests` stays built by `runCompliance` for that seam (a config-flip away), un-exported.
 
 // The transcript-content resolver (B4) — injectable content source, no disk in core.
 export { transcriptContentResolver } from './content.js';

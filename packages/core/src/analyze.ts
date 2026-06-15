@@ -82,8 +82,6 @@ export function analyze(
   // capabilities.judge (the bright line). The MASS contract-under-specified Findings join
   // the friction findings on the same `Report.findings` channel (DECISION B).
   let compliance: Report['compliance'];
-  let dossier: Report['dossier'];
-  let hookRequests: Report['hookRequests'];
   let verificationCoverage: Report['verificationCoverage'];
   const effectiveMandateContext = lineage
     ? { ...mandateContext, lineage: mandateContext?.lineage ?? lineage }
@@ -98,10 +96,12 @@ export function analyze(
       effectiveMandateContext,
     );
     compliance = result.verdicts;
-    dossier = result.dossier;
-    hookRequests = result.hookRequests;
     verificationCoverage = result.verificationCoverage;
     findings.push(...result.findings);
+    // N4/Tier-3 — `result.dossier` / `result.hookRequests` are built by runCompliance (the quarantined
+    // judge's input) but DELIBERATELY NOT attached to the Report: they are off the public surface and the
+    // `--json` envelope. The internal seam stays a config-flip away (an opt-in judge over the residue
+    // reads them from the ComplianceResult, never gating, never the deterministic verdict path).
   }
 
   const timeBounds = timeBoundsOf(session);
@@ -123,8 +123,6 @@ export function analyze(
     },
     findings: applyIgnores(findings, config),
     ...(compliance ? { compliance } : {}),
-    ...(dossier ? { dossier } : {}),
-    ...(hookRequests ? { hookRequests } : {}),
     ...(verificationCoverage ? { verificationCoverage } : {}),
     ...(lineage ? { lineage } : {}),
   };

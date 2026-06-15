@@ -27,12 +27,7 @@ ContentResolver
 CostResult
 CoverageStat
 DERIVE_VERSION
-DOSSIER_SCHEMA_VERSION
 DelegateManifest
-Dossier
-DossierClaim
-DossierClaimSlice
-EVIDENCE_CAP
 EditEvent
 EvalContext
 EvidencePointer
@@ -48,7 +43,6 @@ GenericPredicate
 Harness
 HarnessLineageHook
 HarnessVersionStatus
-HookRequest
 IntentClaim
 InterruptEvent
 LaneCaptureCoverage
@@ -116,8 +110,6 @@ WindowOpensOn
 analyze
 anatomiaAdapter
 applyIgnores
-buildDossier
-buildHookRequests
 canonicalSort
 channelCoverageForClaim
 checkIdForClaim

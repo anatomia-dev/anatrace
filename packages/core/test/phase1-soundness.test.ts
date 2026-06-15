@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyze } from '../src/analyze.js';
+import { runCompliance } from '../src/compliance.js';
 import { claudeAdapter } from '../src/adapters/claude.js';
 import { codexAdapter } from '../src/adapters/codex.js';
 import { verdictForClaim } from '../src/verdict.js';
@@ -376,18 +377,14 @@ describe('Phase 1 filesystem-write completeness', () => {
 });
 
 describe('Phase 1 verification coverage receipt', () => {
-  it('reports checked claims and typed channel gaps in report and dossier', () => {
+  it('reports checked claims and typed channel gaps in the report (dossier coverage mirrors, internal)', () => {
     const mandate: Mandate = {
       schemaVersion: 1,
       framework: 'phase1',
       claims: [neverRead(), neverEgress()],
     };
-    const report = analyze(
-      claudeSession([{ name: 'CompanyConnector', input: {} }]),
-      undefined,
-      undefined,
-      mandate,
-    );
+    const session = claudeSession([{ name: 'CompanyConnector', input: {} }]);
+    const report = analyze(session, undefined, undefined, mandate);
     expect(report.verificationCoverage).toMatchObject({
       totalClaims: 2,
       fullyCheckedClaims: 0,
@@ -401,7 +398,9 @@ describe('Phase 1 verification coverage receipt', () => {
       reason: 'unknown-tool',
       source: 'CompanyConnector',
     });
-    expect(report.dossier?.verificationCoverage).toEqual(report.verificationCoverage);
+    // N4/Tier-3 — the dossier is off the public Report; the internal seam still mirrors the coverage.
+    const internal = runCompliance(mandate, session);
+    expect(internal.dossier.verificationCoverage).toEqual(report.verificationCoverage);
   });
 
   it('keeps a violated claim checked while retaining its independent blind-channel receipt', () => {
