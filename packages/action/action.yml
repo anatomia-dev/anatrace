@@ -26,9 +26,8 @@ inputs:
     required: false
     default: 'true'
   github-token:
-    description: 'Token for posting the sticky PR comment (usually ${{ github.token }}).'
+    description: 'Token for posting the sticky PR comment. Pass `${{ github.token }}` from the workflow, or set the GITHUB_TOKEN env var.'
     required: false
-    default: ${{ github.token }}
   sarif-file:
     description: 'Where to write the violated-only SARIF (upload it with github/codeql-action/upload-sarif).'
     required: false

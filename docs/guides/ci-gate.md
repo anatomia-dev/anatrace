@@ -45,6 +45,7 @@ jobs:
         with:
           session-path: path/to/agent-session.jsonl
           policy: .anatrace.yaml
+          github-token: ${{ github.token }}
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
