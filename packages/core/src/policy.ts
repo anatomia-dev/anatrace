@@ -12,6 +12,7 @@ export type PolicyVerb =
   | 'only_read'
   | 'never_egress'
   | 'never_run'
+  | 'never_edit'
   | 'only_edit';
 
 export type PolicyLoadResult =
@@ -23,6 +24,7 @@ const POLICY_VERBS: readonly PolicyVerb[] = [
   'only_read',
   'never_egress',
   'never_run',
+  'never_edit',
   'only_edit',
 ];
 const ROOT_KEYS = new Set(['version', 'name', 'rules']);
@@ -106,6 +108,7 @@ function targetFor(verb: PolicyVerb): Exclude<PredicateTarget, 'message-text'> {
       return 'egress';
     case 'never_run':
       return 'command-content';
+    case 'never_edit':
     case 'only_edit':
       return 'edit-paths';
   }
@@ -113,6 +116,7 @@ function targetFor(verb: PolicyVerb): Exclude<PredicateTarget, 'message-text'> {
 
 function kindFor(verb: PolicyVerb): Exclude<MandateClaim['kind'], 'intent'> {
   switch (verb) {
+    case 'never_edit':
     case 'only_edit':
     case 'only_read':
       return 'file-scope';
@@ -133,6 +137,8 @@ function saysFor(verb: PolicyVerb, value: string): string {
       return `never egresses to ${value}`;
     case 'never_run':
       return `never runs ${value}`;
+    case 'never_edit':
+      return `never edits ${value}`;
     case 'only_edit':
       return `edits only declared path ${value}`;
   }

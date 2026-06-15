@@ -29,6 +29,26 @@ anatrace — VERDICT: ⚠ UNVERIFIABLE — 2 of 7 claims could not be proven
 - **Zero-instrumentation** — runs on your existing Claude Code / Codex sessions;
   no SDK, no hooks required.
 
+### The hero example
+
+> An agent makes the failing test pass by **editing the test.** Every artifact signal
+> agrees — the code review goes green, CI goes green, the diff is internally consistent —
+> *because the test passes.* Only the transcript shows the passing test **was** the edit.
+
+That's the one thing a diff-reviewer structurally cannot see, and it's a two-line policy:
+
+```yaml
+rules:
+  - id: no-test-edits
+    subject: this-agent
+    never_edit: test/
+```
+
+Run it against the recorded hero session (`packages/cli/test/fixtures/hero/`, with the
+replayable `anatrace.cast`) and anatrace leads with `✗ VIOLATED — no-test-edits` **and**,
+in the same session, an honest `⚠ unverifiable` for a secret-read it couldn't prove because
+a spawned sub-agent's transcript was never captured. The catch and the abstention, together.
+
 > **Status: v0.3.** The cross-harness engine, generic policy loader,
 > deterministic verdict layer, fail-loud channel coverage, coarse egress
 > detection, and delegation lineage have landed. Degraded sessions — a
@@ -109,6 +129,10 @@ rules:
     subject: this-agent
     never_run:
       - rm -rf
+
+  - id: no-test-edits          # the hero check: don't let the agent edit the tests to pass
+    subject: this-agent
+    never_edit: test/
 
   - id: no-external-egress
     subject: any-agent-in-session

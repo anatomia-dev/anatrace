@@ -1,0 +1,13 @@
+version: 1
+name: hero — test-integrity + delegate accountability
+rules:
+  # The hero check: an agent that makes a failing test pass by EDITING the test. The diff and CI go
+  # green; only the transcript shows the passing test WAS the edit. (`test/` is a path substring.)
+  - id: no-test-edits
+    subject: this-agent
+    never_edit: test/
+  # The honest abstention in the SAME session: a delegate-inclusive obligation anatrace cannot prove,
+  # because the spawned sub-agent's transcript was never captured -> unverifiable, never a false "clean".
+  - id: no-secret-reads
+    subject: this-agent-and-all-delegates
+    never_read: id_rsa
