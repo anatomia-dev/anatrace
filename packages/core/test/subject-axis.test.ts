@@ -90,6 +90,58 @@ function completeCoverage(delegateCaptured = true): CaptureCoverage {
   };
 }
 
+/**
+ * Coverage identical to `completeCoverage()` EXCEPT the delegate's manifest cycles back to the
+ * root, making the declared dispatch graph cyclic. A trusted launcher manifest must be an acyclic
+ * dispatch graph; a cycle means the manifest cannot be trusted as exhaustive, so completeness must
+ * collapse (`expandDelegates` cycle arm, `verdict.ts:165-168`).
+ */
+function cyclicCoverage(): CaptureCoverage {
+  return {
+    source: 'trusted-launcher',
+    lanes: [
+      {
+        agent: root,
+        captured: true,
+        delegateManifest: { status: 'complete', delegates: [delegate] },
+      },
+      {
+        agent: delegate,
+        captured: true,
+        delegateManifest: { status: 'complete', delegates: [root] }, // cycle: delegate -> root
+      },
+    ],
+  };
+}
+
+/**
+ * Coverage identical to `completeCoverage()` EXCEPT the delegate lane is declared TWICE. A duplicate
+ * lane means the launcher's per-lane manifest is ambiguous (which delegate set is authoritative?),
+ * so completeness must collapse (`expandDelegates` duplicate-lane arm, `verdict.ts:156-157,162`).
+ */
+function duplicateLaneCoverage(): CaptureCoverage {
+  return {
+    source: 'trusted-launcher',
+    lanes: [
+      {
+        agent: root,
+        captured: true,
+        delegateManifest: { status: 'complete', delegates: [delegate] },
+      },
+      {
+        agent: delegate,
+        captured: true,
+        delegateManifest: { status: 'complete', delegates: [] },
+      },
+      {
+        agent: delegate, // DUPLICATE lane for the same agent key
+        captured: true,
+        delegateManifest: { status: 'complete', delegates: [] },
+      },
+    ],
+  };
+}
+
 describe('ClaimSubject + trusted launcher coverage', () => {
   const includeDelegates: CheckableClaim['subject'] = {
     kind: 'agent',
@@ -421,6 +473,53 @@ describe('ClaimSubject + trusted launcher coverage', () => {
       { roleBindings: { verify: [root] } },
     );
     expect(result).toMatchObject({ status: 'satisfied', reason: 'predicate-matched' });
+  });
+
+  // 0d — the two false-PASS-preventing arms of `expandDelegates` that were untested. Each test is a
+  // DIFFERENTIAL against `completeCoverage()` (which proves the negative `satisfied`, above): the ONLY
+  // change is a cycle / a duplicate lane, so a flip to `unverifiable` isolates exactly that arm. A
+  // regression that let either through would false-PASS an absence verdict on an untrustworthy manifest.
+  it('does not prove a negative when the delegate manifest is cyclic', () => {
+    const result = verdictForClaim(
+      neverRead(includeDelegates),
+      session([]),
+      undefined,
+      undefined,
+      '',
+      { thisAgent: root, captureCoverage: cyclicCoverage() },
+    );
+    expect(result).toMatchObject({
+      status: 'unverifiable',
+      reason: 'delegate-coverage-incomplete',
+    });
+  });
+
+  it('does not prove a negative when a lane is declared more than once', () => {
+    const result = verdictForClaim(
+      neverRead(includeDelegates),
+      session([]),
+      undefined,
+      undefined,
+      '',
+      { thisAgent: root, captureCoverage: duplicateLaneCoverage() },
+    );
+    expect(result).toMatchObject({
+      status: 'unverifiable',
+      reason: 'delegate-coverage-incomplete',
+    });
+  });
+
+  it('still proves a delegate violation even when the manifest is cyclic (a sighting needs no manifest)', () => {
+    const result = verdictForClaim(
+      neverRead(includeDelegates),
+      session([readEvent(delegate, '/repo/secret.txt', 4)]),
+      undefined,
+      undefined,
+      '',
+      { thisAgent: root, captureCoverage: cyclicCoverage() },
+    );
+    expect(result).toMatchObject({ status: 'violated', reason: 'predicate-not-matched' });
+    expect(result.evidence[0]?.agent).toEqual(delegate);
   });
 
   it('does not turn a missing delegate skill into a required-obligation violation', () => {

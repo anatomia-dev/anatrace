@@ -29,6 +29,14 @@ export interface PriceEntry {
   cache_create: number;
   /** USD per 1M cache-read tokens. */
   cache_read: number;
+  /**
+   * OPTIONAL machine-readable provenance: the source the rate was verified against. Promoted from a
+   * free-text comment to a field so it travels with the data (0c). Populated where a row was
+   * explicitly sourced; absent ⇒ provenance was not recorded for that row (honest, never guessed).
+   */
+  source?: string;
+  /** OPTIONAL provenance: the date (YYYY-MM-DD) the rate was last verified against {@link PriceEntry.source}. */
+  asOf?: string;
 }
 
 /**
@@ -43,9 +51,17 @@ export const PRICES: PriceEntry[] = [
   { model: 'claude-opus-4-6', input: 5, output: 25, cache_create: 6.25, cache_read: 0.5 },
   { model: 'claude-sonnet-4-6', input: 3, output: 15, cache_create: 3.75, cache_read: 0.3 },
   { model: 'claude-haiku-4-5', input: 1, output: 5, cache_create: 1.25, cache_read: 0.1 },
-  // GPT-5.5 standard tier, verified 2026-06-14 against developers.openai.com/api/docs/pricing:
-  // $5.00 input / $0.50 cached input / $30.00 output per 1M. (No separate cache-write charge.)
-  { model: 'gpt-5.5', input: 5, output: 30, cache_create: 0, cache_read: 0.5 },
+  // GPT-5.5 standard tier: $5.00 input / $0.50 cached input / $30.00 output per 1M (no separate
+  // cache-write charge). Provenance promoted to the `source`/`asOf` data fields below (0c).
+  {
+    model: 'gpt-5.5',
+    input: 5,
+    output: 30,
+    cache_create: 0,
+    cache_read: 0.5,
+    source: 'https://developers.openai.com/api/docs/pricing',
+    asOf: '2026-06-14',
+  },
 ];
 
 /** The result of a cost computation: the estimate plus the table version used. */

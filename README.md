@@ -45,7 +45,15 @@ npm install --global anatrace
   internal opt-in seam; it is not part of the supported surface and never gates.)
   Absent or non-comparable signal is always `unverifiable`, never a guess — a
   verifier that over-claims is worse than none. Gate CI with `--ci` / `--fail-on`,
-  or emit `--format sarif` for code scanning. *(File-scope adherence is the headline check; it is validated on
+  or emit `--format sarif` for code scanning. **The CI gate fails the build only on
+  `violated`:** under the default `--ci` (fail-on `error`), `unverifiable` maps to
+  `info` and never gates — an honest "I couldn't verify this" is a surfaced blind
+  spot, not a policy failure, so it does not block a merge. (A consumer who wants
+  to hard-stop on blind spots can opt in with `--fail-on info`.) This is *not* a
+  contradiction of the verdict surface refusing to report "all clear" when
+  `unverifiable > 0`: the verdict layer is honest about what it could not prove,
+  while the gate blocks only a proven violation — two different axes, by design.
+  *(File-scope adherence is the headline check; it is validated on
   curated exemplars today — a measured precision/recall benchmark is in progress
   as of 2026-06, not yet a published number.)*
 - **Channel and lineage coverage** — every policy run states how many claims
