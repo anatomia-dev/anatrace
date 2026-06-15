@@ -122,6 +122,38 @@ describe('command-content evaluator (forbidden-command direction)', () => {
     });
   });
 
+  // 0a — the quote-aware three-tier matcher at the VERDICT level (the headline-gate fix + the new
+  // command-unresolvable emitter). The classifier itself is exhaustively pinned in command-match.test.ts;
+  // these prove the wiring through verdictForClaim and that NO existing force-variant verdict inverted.
+  it('0a — a needle in a NON-EXECUTED position no longer false-VIOLATEs (the brand-lethal fix)', () => {
+    // `echo "git push --force"` PRINTS the string; it does not force-push. Old literal `.includes`
+    // false-VIOLATEd this; the executed-surface matcher resolves it satisfied.
+    const echoed = sessWithCommands(['echo "git push --force"']);
+    expect(verdictForClaim(forbiddenCommandClaim('git push --force'), echoed).status).toBe('satisfied');
+    // a forbidden command appearing only as a commit MESSAGE is data, not an execution.
+    const msg = sessWithCommands(['git commit -m "git push --force was avoided"']);
+    expect(verdictForClaim(forbiddenCommandClaim('git push --force'), msg).status).toBe('satisfied');
+    // a comment is never executed.
+    const commented = sessWithCommands(['# remember not to git push --force here']);
+    expect(verdictForClaim(forbiddenCommandClaim('git push --force'), commented).status).toBe('satisfied');
+  });
+
+  it('0a — force variants STILL violate (the fix did NOT weaken the real catch)', () => {
+    expect(verdictForClaim(forbiddenCommandClaim('git push --force'),
+      sessWithCommands(['git push --force-with-lease origin x'])).status).toBe('violated');
+    // a git GLOBAL flag before the subcommand must not let a real force-push slip (was a latent miss).
+    expect(verdictForClaim(forbiddenCommandClaim('git push --force'),
+      sessWithCommands(['git -c core.pager=cat push --force origin x'])).status).toBe('violated');
+  });
+
+  it('0a — an OBFUSCATED forbidden command abstains as unverifiable(command-unresolvable), never clean', () => {
+    for (const cmd of ['eval "git push --force"', 'git push $FORCEFLAG', 'echo "git push --force" | sh']) {
+      const v = verdictForClaim(forbiddenCommandClaim('git push --force'), sessWithCommands([cmd]));
+      expect(v, cmd).toMatchObject({ status: 'unverifiable', reason: 'command-unresolvable' });
+      expect(v.evidence.length, cmd).toBeGreaterThan(0); // points into the timeline (scrub-safe)
+    }
+  });
+
   it('cross-harness — the forbidden-command direction is real on Codex via the REAL `cmd` key', () => {
     // A real Codex exec_command carries the command under `cmd` (cli_version 0.135+), NOT `command`.
     // (This test previously used a fabricated `command` key under an `if (s)` soft-skip with a

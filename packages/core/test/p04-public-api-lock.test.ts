@@ -69,7 +69,7 @@ const FROZEN_EXPORTS = fs
   .sort();
 
 const FROZEN_VERDICT_REASONS = [
-  'absent-signal','channel-coverage-incomplete','codex-blind','content-unresolvable','delegate-coverage-incomplete','harness-version-unrecognized','low-confidence','predicate-matched','predicate-not-matched','routed-to-llm','runtime-scoped','session-parse-suspect','subject-unresolvable','window-unresolvable',
+  'absent-signal','channel-coverage-incomplete','codex-blind','command-unresolvable','content-unresolvable','delegate-coverage-incomplete','harness-version-unrecognized','low-confidence','predicate-matched','predicate-not-matched','routed-to-llm','runtime-scoped','session-parse-suspect','subject-unresolvable','window-unresolvable',
 ].sort();
 
 const FROZEN_LINEAGE_GAP_REASONS = [
