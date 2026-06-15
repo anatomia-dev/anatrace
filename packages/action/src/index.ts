@@ -20,7 +20,9 @@ const require = createRequire(import.meta.url);
 const ANATRACE_CLI = require.resolve('anatrace/dist/index.mjs');
 
 function input(name: string, fallback = ''): string {
-  return process.env[`INPUT_${name.toUpperCase().replace(/[ -]/g, '_')}`]?.trim() || fallback;
+  // GitHub maps an input id to an env var by replacing SPACES with `_` and uppercasing — hyphens are
+  // KEPT (mirrors @actions/core), so `session-path` → `INPUT_SESSION-PATH`.
+  return process.env[`INPUT_${name.replace(/ /g, '_').toUpperCase()}`]?.trim() || fallback;
 }
 function bool(name: string): boolean {
   return /^(true|1|yes)$/i.test(input(name));
