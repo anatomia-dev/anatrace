@@ -1,8 +1,11 @@
 # Contributing to anatrace
 
-Thanks for your interest. anatrace is in an early foundation phase — the engine
-isn't built yet, so the most useful contributions right now are issues and
-discussion. Code contributions are welcome once the engine milestone opens.
+Thanks for your interest. anatrace is a shipping, pre-1.0 dual-package engine — a
+deterministic, zero-LLM verifier of agent transcripts (`anatrace-core`, the engine)
+and its CLI (`anatrace`). Both code and issues are welcome: bug fixes, new harness/
+mandate adapters, fixtures from real transcripts, and docs. Public APIs are frozen
+by a snapshot test and may still evolve pre-1.0 — see **Versioning & releases** below
+before changing the surface.
 
 ## Canonical repository
 

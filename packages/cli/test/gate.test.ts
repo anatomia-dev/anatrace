@@ -475,3 +475,35 @@ describe('R2 byte-identity — the NO-mandate run is unchanged (with vs without)
     expect('compliance' in withM).toBe(true);
   });
 });
+
+describe('P0.6 — the version floor applies on the file-scope BATCH path too (blocker regression)', () => {
+  function claudeSessionEditingAtVersion(dir: string, editPaths: string[], version: string): string {
+    const content = editPaths.map((p, i) => ({ type: 'tool_use', id: `e${i}`, name: 'Write', input: { file_path: p, content: 'x' } }));
+    const line = {
+      type: 'assistant', version, sessionId: 's', uuid: 'a1', timestamp: '2026-06-08T00:00:01.000Z',
+      message: {
+        id: 'm-a1', role: 'assistant', model: 'claude-opus-4-8', content,
+        usage: { input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      },
+    };
+    const file = path.join(dir, 'session.jsonl');
+    fs.writeFileSync(file, enc([line]));
+    return file;
+  }
+
+  it('an out-of-major harness version → file-scope claim is unverifiable, NOT a confident violated/satisfied (no gate)', () => {
+    const dir = tmpDir();
+    // Same out-of-contract edit as the `--ci exits 1 on violated` test, but stamped with a
+    // whole-major-drifted CC version (3.x). Pre-fix the batch path bypassed the version floor → a
+    // CONFIDENT `violated` (exit 1, a false-accuse) while --last said "unverifiable". The floor must
+    // apply on the batch path too: the verdict is unverifiable(harness-version-unrecognized), no gate.
+    const session = claudeSessionEditingAtVersion(
+      dir,
+      ['packages/cli/src/types/proof.ts', 'packages/cli/src/utils/displayNames.ts'],
+      '3.0.0',
+    );
+    const r = run([session, '--mandate', ANATOMIA_SRC, '--ci'], dir);
+    expect(r.code).toBe(0); // unverifiable never gates — no false exit-1 on a drifted transcript
+    expect(r.stdout).toContain('harness-version-unrecognized');
+  });
+});

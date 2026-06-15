@@ -266,8 +266,10 @@ function resultProvesAbsence(
  * P0.8 — the parse-suspect signal: a NON-EMPTY transcript that parsed to ZERO structured events is a
  * likely misparse (e.g. a within-range renamed event type the parser silently skipped). "No events"
  * then cannot prove absence — it may be a misparse, not compliance. Deliberately NOT gated on
- * `tokenTotalSuspect`: that flips on the intentional multi-file Codex child-usage exclusion
- * (`codex.ts`), so gating on it would mass-abstain every multi-file Codex session.
+ * `tokenTotalSuspect`: a cumulative-token-fold regression is NOT event loss. The timeline can be
+ * fully present while token totals don't fold monotonically, so a token-fold break must not abstain
+ * an absence verdict — only ZERO structured events (with non-empty input) does. (`tokenTotalSuspect`
+ * stays a non-gating `--last` breadcrumb.)
  */
 function sessionParseSuspect(session: NormalizedSession): boolean {
   const h = session.parseHealth;
@@ -1141,6 +1143,15 @@ export function verdictsForMandate(
       claim.predicate.scope !== 'runtime' &&
       claim.scope.kind === 'whole-session'
     ) {
+      // P0.6 — the batch path must honor the SAME catastrophic version floor as verdictForClaim. The
+      // `continue` at the end of this branch skips the verdictForClaim fallback that applies it, so
+      // without this an out-of-major-drifted transcript would yield a CONFIDENT file-scope verdict
+      // (a cardinal-sin false-PASS / false-accuse) while --last prints "verdicts are unverifiable".
+      // Placed first, before subject resolution and the absence gate (mirrors pre-check 3.5).
+      if (harnessVersionStatus(session.harness, session.observedVersions) === 'out-of-range') {
+        out.push(verdict(claim.id, 'unverifiable', 'harness-version-unrecognized'));
+        continue;
+      }
       const key = claimBatchKey(claim);
       const whitelist =
         (claim.predicate.target === 'edit-paths'

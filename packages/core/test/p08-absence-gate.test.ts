@@ -10,8 +10,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { codexAdapter } from '../src/adapters/codex.js';
-import { verdictForClaim } from '../src/verdict.js';
-import type { CheckableClaim } from '../src/mandate.js';
+import { verdictForClaim, verdictsForMandate } from '../src/verdict.js';
+import type { CheckableClaim, Mandate } from '../src/mandate.js';
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 const jsonl = (objs: unknown[]): string => objs.map((o) => JSON.stringify(o)).join('\n');
@@ -72,5 +72,49 @@ describe('P0.8 — the absence gate closes the zero-event false-PASS', () => {
     const s = codexAdapter.parse([{ name: 'parent', bytes: enc(misparsedCodex) }])!;
     const v = verdictForClaim(forbiddenCommandClaim('rm -rf'), s);
     expect(v.reason).toBe('session-parse-suspect');
+  });
+});
+
+describe('P0.8 — the BATCH (file-scope) path also runs the absence gate', () => {
+  // The file-scope batch (verdictsForMandate → fileScopeVerdict) has its own absence-gate call.
+  // A parse-suspect session must degrade a satisfied file-scope verdict, not report a clean pass.
+  const editScopeMandate: Mandate = {
+    schemaVersion: 1,
+    framework: 'test',
+    claims: [
+      {
+        id: 'fs',
+        says: 'edits stay within src/',
+        kind: 'file-scope',
+        scope: { kind: 'whole-session' },
+        source: { kind: 'cross-artifact', workItemSlug: 'p', path: 'contract.yaml', fidelity: 'verbatim' },
+        predicate: { target: 'edit-paths', matcher: 'contains', scope: 'transcript', value: 'src/' },
+      },
+    ],
+  };
+
+  it('a parse-suspect session → file-scope claim resolves unverifiable(session-parse-suspect), not satisfied', () => {
+    const s = codexAdapter.parse([{ name: 'parent', bytes: enc(misparsedCodex) }])!;
+    const v = verdictsForMandate(editScopeMandate, s);
+    expect(v[0]).toMatchObject({ status: 'unverifiable', reason: 'session-parse-suspect' });
+  });
+});
+
+describe('P0.8 — tokenTotalSuspect does NOT gate (a token-fold break is not event loss)', () => {
+  // A Codex session with a REAL cumulative-token regression (suspect=true) but events PRESENT must
+  // verify normally — the absence gate keys on zero structured events, never on tokenTotalSuspect.
+  const tokenRegression = jsonl([
+    { type: 'session_meta', payload: { id: 'P', cli_version: '0.139.0', cwd: '/r' } },
+    { timestamp: '2026-06-13T12:00:01.000Z', type: 'response_item', payload: { type: 'function_call', name: 'exec_command', arguments: JSON.stringify({ cmd: 'git status' }), call_id: 'c1' } },
+    { timestamp: '2026-06-13T12:00:02.000Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 900, cached_input_tokens: 0, output_tokens: 100, total_tokens: 1000 } } } },
+    { timestamp: '2026-06-13T12:00:03.000Z', type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 400, cached_input_tokens: 0, output_tokens: 100, total_tokens: 500 } } } },
+  ]);
+
+  it('suspect=true + events present → NOT session-parse-suspect; a clean forbidden check still satisfies', () => {
+    const s = codexAdapter.parse([{ name: 'parent', bytes: enc(tokenRegression) }])!;
+    expect(s.parseHealth!.tokenTotalSuspect).toBe(true); // a real monotonicity regression
+    expect(s.parseHealth!.structuredEventCount).toBeGreaterThan(0); // but the timeline is present
+    const v = verdictForClaim(forbiddenCommandClaim('git push --force'), s);
+    expect(v.status).toBe('satisfied'); // no force-push ran; tokenTotalSuspect must not abstain it
   });
 });
