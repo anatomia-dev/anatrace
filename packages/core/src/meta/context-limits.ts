@@ -11,7 +11,13 @@
  * `priced:false`. Limits are in TOKENS (the context window's input budget).
  */
 
-/** The version stamp for the bundled context-limit table. Bump when any limit changes. */
+/**
+ * The version stamp for the bundled context-limit table. Bump when any limit changes — and ONLY
+ * then. It is deliberately INDEPENDENT of `PRICE_TABLE_VERSION`: the two tables change on separate
+ * cadences, so this stamp is correctly older when the limits have not moved. Do NOT force-align it to
+ * the price-table date to make them "match" — that would claim a re-verification that did not happen.
+ * The `pricing-bump-gate` test binds this stamp to the limit data via a content digest (0c).
+ */
 export const CONTEXT_LIMITS_VERSION = '2026-06-11';
 
 /** One model's context-window limit, in tokens. */
