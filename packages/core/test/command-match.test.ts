@@ -32,6 +32,8 @@ describe('0a — T1 (match -> violated): the needle is the executed command', ()
     ['git push --force-with-lease origin feature/x', PUSH], // force-with-lease REWRITES the branch
     ['git push --force origin x', PUSH],
     ['git push "--force"', PUSH], // a quoted FLAG is still executed (quotes concatenate away)
+    ["git $'push' --force origin main", PUSH], // ANSI-C $'...' quote: $'push' executes as `push`; the
+    //                                            char after the closing quote must NOT be swallowed
     ['git rebase origin/main', REBASE],
     ['git status --porcelain; echo "--- rebasing ---"; git rebase origin/main 2>&1 | tail -25', REBASE], // mid-chain
     ['cd /repo && git push --force', PUSH], // segment after &&
@@ -127,6 +129,8 @@ describe('0a — INVARIANT: an executed-but-obfuscated forbidden command is NEVE
     'X=--force; git push $X',
     'git push \\\n--force', // backslash-newline line continuation -> executes git push --force
     'git push --force #danger', // a trailing comment does not undo the force push
+    "git $'push' --force origin main", // ANSI-C quote must not swallow the following space (real force push)
+    "git push $'--force'", // the ANSI-C-quoted flag still executes as --force
     'git push 2>/dev/null --force', // mid-command redirect must not break needle contiguity
     'git 1>out 2>err push --force', // multiple mid-command redirects
     'echo "git push --force', // unbalanced
