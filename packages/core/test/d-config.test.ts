@@ -123,6 +123,17 @@ describe('D-CONFIG — SARIF emits violated-only; CI exit codes', () => {
     expect(log.runs[0].results[0].level).toBe('error');
   });
 
+  it('every SARIF result carries a location (GitHub code-scanning requires it) — fallback uri when no file', () => {
+    const gating = complianceFindings(mandate, verdicts, undefined, { violatedOnly: true });
+    const log = toSarif(gating, 'anatrace', undefined, 'policy.yaml');
+    for (const r of log.runs[0].results) {
+      expect(r.locations?.length, JSON.stringify(r)).toBeGreaterThan(0);
+      expect(r.locations![0]!.physicalLocation.artifactLocation.uri.length).toBeGreaterThan(0);
+    }
+    // a finding with no file location falls back to the supplied obligation source.
+    expect(log.runs[0].results.some((r) => r.locations![0]!.physicalLocation.artifactLocation.uri === 'policy.yaml')).toBe(true);
+  });
+
   it('ciExitCode → 1 on a violated@error, 0 when nothing meets the threshold', () => {
     const violated: Finding[] = [{ ruleId: 'compliance/verify-independence', severity: 'error', message: 'x' }];
     const infoOnly: Finding[] = [{ ruleId: 'compliance/verify-independence', severity: 'info', message: 'x' }];

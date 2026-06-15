@@ -52,6 +52,7 @@ export function toSarif(
   findings: Finding[],
   toolName = 'anatrace',
   verificationCoverage?: VerificationCoverage,
+  fallbackUri = '.anatrace.yaml',
 ): SarifLog {
   const results: SarifResult[] = [];
   const ruleIds = new Set<string>();
@@ -59,22 +60,22 @@ export function toSarif(
     const level = sarifLevel(f.severity);
     if (!level) continue; // off → omitted
     ruleIds.add(f.ruleId);
+    // GitHub code-scanning requires EVERY result to carry at least one location. A conduct verdict is
+    // not always tied to a repo line, so fall back to the obligation's source (the policy/mandate the
+    // CLI passes) — the SARIF stays ingestible while a real file location is used whenever known.
+    const uri = f.location?.file ?? fallbackUri;
     results.push({
       ruleId: f.ruleId,
       level,
       message: { text: f.message },
-      ...(f.location
-        ? {
-            locations: [
-              {
-                physicalLocation: {
-                  artifactLocation: { uri: f.location.file },
-                  ...(f.location.line ? { region: { startLine: f.location.line } } : {}),
-                },
-              },
-            ],
-          }
-        : {}),
+      locations: [
+        {
+          physicalLocation: {
+            artifactLocation: { uri },
+            ...(f.location?.line ? { region: { startLine: f.location.line } } : {}),
+          },
+        },
+      ],
     });
   }
   return {

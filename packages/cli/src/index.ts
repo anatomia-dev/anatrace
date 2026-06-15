@@ -171,7 +171,7 @@ program
     if (format === 'sarif') {
       process.stdout.write(
         JSON.stringify(
-          toSarif(gateSet, 'anatrace', report.verificationCoverage),
+          toSarif(gateSet, 'anatrace', report.verificationCoverage, opts.policy ?? opts.mandate ?? '.anatrace.yaml'),
           null,
           2,
         ) + '\n',
