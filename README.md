@@ -12,11 +12,14 @@ within it. Across both harnesses, entirely on your machine.
 - **Local** — no network, no upload. Your transcripts never leave your machine.
 - **Cross-harness** — one model over Claude *and* Codex.
 
-> **Status: v0.2.** The cross-harness engine, generic policy loader,
+> **Status: v0.3.** The cross-harness engine, generic policy loader,
 > deterministic verdict layer, fail-loud channel coverage, coarse egress
-> detection, and delegation lineage have landed. The public API surface and the
-> `unverifiable` reason vocabulary are frozen by a snapshot test; both `anatrace`
-> and `anatrace-core` are pre-1.0 and versioned independently.
+> detection, and delegation lineage have landed. Degraded sessions — a
+> parse-suspect transcript or an unrecognized harness version — downgrade to
+> `unverifiable` rather than ever false-passing, on every verdict path. The
+> public API surface and the `unverifiable` reason vocabulary are frozen by a
+> snapshot test; both `anatrace` and `anatrace-core` are pre-1.0 and versioned
+> independently.
 
 ## Install
 
@@ -50,7 +53,7 @@ npm install --global anatrace
   commands, and incomplete delegate capture downgrade a clean negative to
   `unverifiable`; observed violations remain violations.
 
-This first release is the honest engine, not the final audit artifact. It
+This release is the honest engine, not the final audit artifact. It
 provides deterministic transcript verification with explicit coverage limits.
 Timestamped and hashed portable attestations remain a later phase.
 
