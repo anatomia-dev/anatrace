@@ -1,5 +1,137 @@
 # anatrace
 
+## 0.3.0
+
+### Minor Changes
+
+- 1705d76: Pre-publish fixes for 0.3.0: close the version-floor batch bypass + correct GPT-5.5 pricing.
+
+  - 🔴 **Blocker — version floor bypassed on the file-scope batch path.** `harnessVersionStatus` ran
+    only inside `verdictForClaim`; the file-scope batch branch (edit-paths/read-paths whitelist) applied
+    the absence gate and `continue`d, skipping the floor. Over a whole-major-drifted (out-of-range)
+    transcript a file-scope claim returned a CONFIDENT `satisfied`/`violated` (false-PASS / false-accuse,
+    reachable via `anatrace --mandate … --ci`) while `--last` printed "unverifiable". Fixed: the batch
+    path now applies the same out-of-range guard first. Proven by a binary-level gate test (verified by
+    reproducing the confident verdict with the guard removed, then the flip to unverifiable).
+  - 🟠 **GPT-5.5 price row was ~4× low.** Was 1.25/10/0.125; actual standard tier is $5.00 in / $0.50
+    cached / $30.00 out per 1M (verified 2026-06-14 against developers.openai.com/api/docs/pricing).
+    `PRICE_TABLE_VERSION` bumped to 2026-06-14.
+  - Tests: the file-scope batch absence gate and the tokenTotalSuspect-non-gating decision now have
+    coverage (both were untestable-green before). Hardened the API export-snapshot extractor to also
+    catch `export const/function/class` and `export *` (was brace-only). Corrected a stale
+    `tokenTotalSuspect` comment (it no longer flips on the multi-file Codex child-usage exclusion
+    post-#23 — a token-fold break is not event loss). Rewrote the CONTRIBUTING intro (the engine ships).
+
+- 444964e: Feeders fail loud (Phase 0 P0.3) — silent under-extraction becomes a visible, typed gap.
+
+  Mandate extraction is structural regex over one framework's shapes; on drift it yielded fewer
+  claims with no signal, so the coverage stat over-claimed by omission. This adds a deterministic,
+  bounded extraction-honesty layer:
+
+  - New `ExtractionDiagnostic` (on `Mandate.diagnostics`, additive — OMITTED when empty, so clean
+    output and the golden corpus are byte-identical). Two kinds: `unextracted-marker` (a recognized
+    obligation marker that produced no claim) and `recognized-but-empty` (framework detected, zero
+    claims extractable).
+  - The anatomia adapter now flags: a drifted `ana-verify` whose build-report independence rule no
+    longer matches (`verify-independence`), a `skills:` frontmatter key present but not parsed as an
+    inline list (`skills-frontmatter`), and a detected-but-empty agent-def (closing the
+    "dangerous middle" F4 gap). The superpowers adapter flags an `Iron Law` it triggers on but cannot
+    mechanically extract (`iron-law`).
+  - The CLI surfaces gaps: `mandate show` prints an "⚠ extraction gaps" section; a recognized-but-empty
+    source now reports the gap loudly instead of a bare "extracted no claims."
+  - The honest coverage line is relabeled: "X of Y **declared** obligations" → "X of the Y obligations
+    it **could structurally recognize**" — the prior wording implied Y was the complete obligation
+    surface. The coverage DENOMINATOR is unchanged (= extracted claims); we deliberately do NOT inject
+    an unrecognized-prose count (circular, non-deterministic, and over-claiming — the exact failure the
+    brand exists to prevent). Recall is an out-of-band benchmark, not a per-run number.
+
+  `mandate.schema.json` gains the additive optional `diagnostics` property + `ExtractionDiagnostic`
+  definition.
+
+- 062e8c8: Wire the observed harness version into a fail-loud signal + stop the CC `toolUseId`-drift false gap
+  (Phase 0 P0.6).
+
+  `observedVersions` was captured but read by zero decision paths, and the delegate-lineage code
+  emitted a spurious `dispatch-link-missing` on real CC ≤2.1.90 sessions (the `toolUseId` sidecar field
+  did not exist yet — 157/200 real files lack it). This adds two honest, non-trust layers:
+
+  - **Catastrophic version floor** (`harness-support.ts`, one editable table): a parseable version whose
+    MAJOR is outside the supported range (CC `2.x`, Codex `0.x`) gates every transcript-scoped claim to
+    `unverifiable(harness-version-unrecognized)`. Never false-fires on current 2.1.x / 0.13x sessions;
+    an absent version is a breadcrumb, not a gate.
+  - **`parseHealth` on `NormalizedSession`** (`{ tokenTotalSuspect, structuredEventCount, inputNonEmpty }`),
+    captured SYNCHRONOUSLY at parse time (never read from the adapter's mutable `capabilities` singleton
+    later — a latent race). This is the signal the Step-8 absence gate consumes to stop a within-range
+    misparse (zero events) from reading "absence" as "compliance" on a forbidden check.
+  - The CC `toolUseId` guard: a missing `toolUseId` is only a `dispatch-link-missing` on CC `> 2.1.90`.
+
+  New `VerdictReason` members: `harness-version-unrecognized` (emitted now, by the verdict pre-check)
+  and `session-parse-suspect` (emitted by the Step-8 absence gate — landing here so both are in the set
+  before the Step-9 enum lock). The `--last` breadcrumb surfaces unrecognized/suspect signals.
+
+### Patch Changes
+
+- 0e28c1e: Honesty-floor pass + release discipline (Phase 0 P0.5 — the final prep before 0.2.1).
+
+  Docs (no claim the code doesn't honor):
+
+  - README: make the **zero-LLM public surface** claim explicit (the judge cluster is now quarantined);
+    "exemplar-validated" → a dated "recall benchmark in progress (as of 2026-06), not a published number";
+    the `anatrace-action` entry is now honest ("reserved slot; not yet functional and not published — do
+    not depend on it"; the CLI gates CI today). Dropped a user-facing "Phase 2" milestone label.
+  - `anatrace-action` placeholder string no longer leaks an internal milestone code.
+
+  Release discipline:
+
+  - CI now enforces **no package/public-API change without a changeset** (`changeset status` on every PR);
+    combined with the export-snapshot + reason value-locks, an unintended surface change fails loudly.
+  - Documented **independent versioning** (`fixed: []`) in CONTRIBUTING.
+
+  Test hygiene (folded-in follow-ups):
+
+  - Migrated the layout-obsolete `codex-subagent-storage` corpus fixture to the real Codex `children/rollout-*`
+    layout (the corpus loader now reads codex children as separate rollout files, mirroring reality).
+  - Added CLI render coverage for the P0.6 honesty breadcrumb (version-unrecognized / parse-suspect).
+
+  No public-API or verdict-behavior change in this PR — docs, tests, CI, and a fixture move only.
+
+- 30a7811: Version-stamped conformance over real-FORMAT fixtures + the pin-fixture helper (Phase 0 P0.7).
+
+  Adds `fixtures/real/<harness>@<version>/` — committed real-FORMAT / synthetic-CONTENT skeletons (wire
+  shape transcribed verbatim from real transcripts; values are safe placeholders), including the real
+  Codex `cmd`-key force-push fixture that proves Step 3's headline exit criterion (`violated` on a real
+  `cmd` key). `p07-real-conformance.test.ts` asserts every fixture parses to a non-trivial,
+  version-RECOGNIZED, parse-HEALTHY session.
+
+  Adds a gitignored `fixtures/real-local/` corpus (true ground truth, scrubbed) that the conformance
+  test reads when present and skips otherwise — never committed, because the repo is public and `scrub`
+  only removes paths/emails/keys, not conversation/code. `scripts/pin-fixture.ts` (reusing
+  discover + scrub + observedVersions) captures a real transcript into that local corpus, so adding a
+  new harness version is a one-command change. Ships `docs/maintenance.md` (how to pin) and the
+  harness-coverage-matrix two-corpora note. This corpus gates the Step-8 soundness property tests.
+
+- ee2db6b: Codex multi-file tree discovery (Phase 0 P0.9).
+
+  Real Codex stores a delegate session as a SEPARATE `rollout-*.jsonl` in the same date directory,
+  linked by `session_meta.parent_thread_id` — not as a Claude-style `subagents/agent-*.jsonl` child.
+  `buildCodexGroup` passed core only the single parent rollout, so the Codex reachability/lineage
+  engine NEVER ran on real input (the lineage twin of the `cmd`-key bug). Discovery now gathers the
+  parent + every sibling `rollout-*.jsonl` in the date dir as candidate children; the core reachability
+  engine filters them by `parent_thread_id` chaining, so unrelated same-day sessions are dropped and
+  only true descendants are parsed as delegate lanes. Proven with a real date-dir/`rollout-*` layout
+  fixture (`discover-codex.test.ts`): the child surfaces as an observed delegate, a stranger does not.
+
+- Updated dependencies [1705d76]
+- Updated dependencies [3cecc90]
+- Updated dependencies [444964e]
+- Updated dependencies [b06a985]
+- Updated dependencies [0e28c1e]
+- Updated dependencies [062e8c8]
+- Updated dependencies [30a7811]
+- Updated dependencies [5817114]
+- Updated dependencies [82cab71]
+  - anatrace-core@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes
