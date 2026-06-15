@@ -37,6 +37,7 @@ import type {
 import { skillsInvokedInScope } from './skills.js';
 import { laneCapture, isGradeableCapture } from './meta/lane.js';
 import { commandStringOf, isUnreadableCommandEvent } from './derive.js';
+import { classifyCommandMatch } from './command-match.js';
 import { harnessVersionStatus } from './harness-support.js';
 import {
   channelCoverageForClaim,
@@ -66,6 +67,9 @@ export type VerdictReason =
   | 'low-confidence' // confidence:'low' (nested/overlapping window, dispatch)
   | 'absent-signal' // a positive obligation whose signal never appears
   | 'content-unresolvable' // ContentResolver returned null / absent
+  | 'command-unresolvable' // 0a — a forbidden-command check whose EXECUTED surface is obfuscated
+  //                          (eval / $(…) / backtick / a $VAR that could expand to the needle /
+  //                          pipe-into-an-interpreter / unbalanced quoting): can't prove ran-or-not
   | 'codex-blind' // a Claude-only signal on a Codex session
   | 'subject-unresolvable' // this-agent / role binding was absent or ambiguous
   | 'delegate-coverage-incomplete' // no complete trusted delegate manifest / missing declared lane
@@ -766,17 +770,28 @@ function evalCommandContent(
   }
   const needle = String(predicate.value ?? '');
   const isNegative = NEGATIVE_MATCHERS.has(predicate.matcher);
+  // 0a — the THREE-TIER quote-aware classifier replaces the literal `.includes` (which false-VIOLATEd
+  // a needle in a non-executed position like `echo "git push --force"`). Per event: 'match' (the needle
+  // IS the executed command), 'no-match' (provably not executed), 'unresolvable' (obfuscation defeats a
+  // static surface). The invariant: ambiguity can only be 'match'/'unresolvable', never 'no-match'.
   const hits: SessionEvent[] = [];
+  const unresolved: SessionEvent[] = [];
   for (const e of scopedEvents) {
     const cmd = commandStringOf(e);
     if (!cmd) continue;
-    if (matchStr(cmd, predicate.matcher, needle)) hits.push(e);
+    const tier = commandTier(cmd, predicate.matcher, needle);
+    if (tier === 'match') hits.push(e);
+    else if (tier === 'unresolvable') unresolved.push(e);
   }
   if (isNegative) {
-    // "must NOT run X": a matching command is a VIOLATION of the obligation.
+    // "must NOT run X": a matching command is a VIOLATION (worst-wins — a proven hit overrides abstain).
     if (hits.length > 0) return negate(claim.id, true, hits.map(pointer));
-    // Canary: an unreadable command-tool event (shape drift we couldn't parse) means we cannot
-    // prove the forbidden command was NOT run — degrade to unverifiable, never report false-clean.
+    // An obfuscated command whose executed surface we couldn't resolve: we cannot prove the forbidden
+    // command was NOT run — abstain with the precise reason, never report false-clean.
+    if (unresolved.length > 0) {
+      return verdict(claim.id, 'unverifiable', 'command-unresolvable', unresolved.map(pointer));
+    }
+    // Canary: an unreadable command-tool event (shape drift we couldn't parse) — same honesty rule.
     if (scopedEvents.some(isUnreadableCommandEvent)) {
       return verdict(claim.id, 'unverifiable', 'content-unresolvable');
     }
@@ -785,6 +800,10 @@ function evalCommandContent(
   // Positive ("ran X"): a hit is satisfaction; absence is unprovable, never a violation.
   if (hits.length > 0) {
     return verdict(claim.id, 'satisfied', 'predicate-matched', hits.map(pointer));
+  }
+  // An obfuscated command that COULD be X but we couldn't resolve → can't confirm it ran.
+  if (unresolved.length > 0) {
+    return verdict(claim.id, 'unverifiable', 'command-unresolvable', unresolved.map(pointer));
   }
   // Only blind when the harness has no shell-tool primitive at all.
   const hasShell = session.events.some((e) => e.type === 'tool' && (e.name === 'Bash' || e.name === 'exec_command'));
@@ -1065,6 +1084,18 @@ function resolveWindow(
 
 
 // ─── matchers ────────────────────────────────────────────────────────────────────────────
+/**
+ * 0a — the command-content tier for ONE command string. `exists` keeps the trivial "any command ran"
+ * semantics; the substring (`contains`/`not_contains`) and exact (`equals`/`not_equals`) matchers route
+ * through the quote-aware {@link classifyCommandMatch} so a needle in a non-executed position resolves
+ * 'no-match' and an obfuscated one resolves 'unresolvable' — NEVER a literal-`.includes` false hit.
+ */
+function commandTier(cmd: string, matcher: string, needle: string): 'match' | 'no-match' | 'unresolvable' {
+  if (matcher === 'exists') return cmd.length > 0 ? 'match' : 'no-match';
+  const exact = matcher === 'equals' || matcher === 'not_equals';
+  return classifyCommandMatch(cmd, needle, exact);
+}
+
 function matchStr(haystack: string, matcher: string, needle: string): boolean {
   switch (matcher) {
     case 'contains':
