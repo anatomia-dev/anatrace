@@ -400,7 +400,7 @@ rules:
     });
   });
 
-  it('pretty output states coverage and the closed unverifiable reason', () => {
+  it('pretty output LEADS with the verdict and states the closed unverifiable reason (N1)', () => {
     const dir = tmpDir();
     const session = claudeCleanSession(dir);
     const policy = path.join(dir, 'policy.yaml');
@@ -414,10 +414,10 @@ rules:
 `,
     );
     const r = run([session, '--policy', policy], dir);
-    expect(r.stdout).toContain('coverage: checked 0 of 1 claims');
-    expect(r.stdout).toContain(
-      'no-secret: unverifiable:delegate-coverage-incomplete',
-    );
+    // N1 — the verdict leads, refuses green (1 unverifiable), and keeps the closed reason + claimId.
+    expect(r.stdout.split('\n')[0]).toContain('VERDICT: ⚠ UNVERIFIABLE — 1 of 1 claim could not be proven');
+    expect(r.stdout).toContain('✓ satisfied: 0   ✗ violated: 0   ⚠ unverifiable: 1');
+    expect(r.stdout).toContain('1 unverifiable: delegate-coverage-incomplete (no-secret)');
   });
 
   it('binds role:<name> to the root lane only when --role is explicit', () => {

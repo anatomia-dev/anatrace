@@ -1,16 +1,33 @@
 # anatrace
 
-**Deterministic, local, cross-harness analysis for AI coding sessions.**
+**Did your AI agent do what it was supposed to — and what can you actually *prove* it didn't do?**
 
-anatrace reads your agent's own session transcripts (Claude Code, Codex) and
-answers questions a log viewer can't: what did the session cost, where did it
-hit friction, and — given the mandate the harness recorded — did the agent stay
-within it. Across both harnesses, entirely on your machine.
+You gave an agent broad access to your repo. It edited files, ran commands, maybe
+spawned sub-agents. anatrace reads the session transcript the harness already wrote
+(Claude Code, Codex) and returns a **deterministic verdict** on whether the agent
+stayed within its obligations — and, when the evidence is incomplete, it answers
+**`unverifiable(reason)`** instead of ever guessing "clean."
 
-- **Deterministic** — the same input bytes produce a byte-identical result. No
-  LLM grades the LLM.
+That last part is the whole point. A verifier that over-claims is worse than none.
+anatrace **leads with the verdict and refuses to go green under degradation**: a
+deleted, compacted, cross-store, or version-drifted transcript downgrades to
+`unverifiable`, never `satisfied`.
+
+```text
+anatrace — VERDICT: ⚠ UNVERIFIABLE — 2 of 7 claims could not be proven
+  ✓ satisfied: 5   ✗ violated: 0   ⚠ unverifiable: 2
+    ⚠ 1 unverifiable: codex-blind (verify-independence)
+    ⚠ 1 unverifiable: delegate-coverage-incomplete (no-secret)
+  session: claude · claude-opus-4-8 · 482 turns · 14 files
+  cost: ~$27.36 · tokens 36.0M total
+```
+
+- **Deterministic, zero-LLM in the published verdict path** — same input bytes →
+  byte-identical result, reproducible by someone who doesn't trust you. No LLM
+  grades the LLM.
 - **Local** — no network, no upload. Your transcripts never leave your machine.
-- **Cross-harness** — one model over Claude *and* Codex.
+- **Zero-instrumentation** — runs on your existing Claude Code / Codex sessions;
+  no SDK, no hooks required.
 
 > **Status: v0.3.** The cross-harness engine, generic policy loader,
 > deterministic verdict layer, fail-loud channel coverage, coarse egress
@@ -30,13 +47,9 @@ npm install --global anatrace
 
 ## What it does today
 
-- **Provenance + cost** — per-session token / turn / tool counts and cost,
-  derived from the transcript bytes (bit-frozen `ProvenanceCounts`).
-- **Friction** — deterministic findings about where a session struggled.
-- **Mandate inspection** — `anatrace mandate show <dir>` extracts the declared
-  mandate (claims + predicate coverage) from a framework's source files.
-- **Generic policy loading** — a repository-owned `.anatrace.yaml` compiles
-  directly to the Mandate IR without a framework adapter.
+The verdict leads; cost/tokens/friction ride along as a footer (table-stakes, never
+the headline).
+
 - **Compliance verdicts** — given a mandate, anatrace emits per-claim
   deterministic verdicts (`satisfied` / `violated` / `unverifiable`) with a
   closed, machine-readable reason. **The public verdict surface ships ZERO LLM**:
@@ -60,6 +73,14 @@ npm install --global anatrace
   were checked and lists typed blind spots. Unknown tools, unsupported shell
   commands, and incomplete delegate capture downgrade a clean negative to
   `unverifiable`; observed violations remain violations.
+- **Mandate inspection** — `anatrace mandate show <dir>` extracts the declared
+  mandate (claims + predicate coverage) from a framework's source files.
+- **Generic policy loading** — a repository-owned `.anatrace.yaml` compiles
+  directly to the Mandate IR without a framework adapter.
+- *Ride-along footer (table-stakes, not the headline):* per-session token / turn /
+  tool counts and an estimated **cost** (bit-frozen `ProvenanceCounts`), plus
+  deterministic **friction** findings about where a session struggled — aggregated,
+  below the verdict.
 
 This release is the honest engine, not the final audit artifact. It
 provides deterministic transcript verification with explicit coverage limits.

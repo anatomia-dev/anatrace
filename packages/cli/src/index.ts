@@ -52,7 +52,7 @@ const FAIL_ON_VALUES: readonly Severity[] = ['off', 'info', 'warn', 'error'];
 const program = new Command();
 program
   .name('anatrace')
-  .description('Deterministic, local, cross-harness agent-session analysis (provenance + cost + friction)')
+  .description('Deterministic, local verifier of what an AI agent did — and an honest account of what could not be proven. Runs on your existing Claude Code / Codex sessions; no instrumentation.')
   .version(version)
   .argument('[path]', 'path to a session transcript (Claude <id>.jsonl or Codex rollout-*.jsonl)')
   .option('--json', 'emit the Report envelope as JSON (alias for --format json)')
