@@ -1,0 +1,41 @@
+name: anatrace-demo
+# A real CI run of the anatrace Action, dogfooded on the committed test-edit HERO fixture (which
+# intentionally violates), so a PR shows the full flow end-to-end: violated-only SARIF upload, the
+# sticky verdict comment leading with the unverifiables, and the gate exit. `continue-on-error` keeps
+# the deliberate hero violation from failing the repo's own PR.
+on:
+  pull_request: { branches: [main] }
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r run build
+      - name: anatrace verify (hero fixture)
+        id: anatrace
+        continue-on-error: true # the hero fixture intentionally violates — demo only
+        uses: ./packages/action
+        with:
+          session-path: packages/cli/test/fixtures/hero/session.jsonl
+          policy: packages/cli/test/fixtures/hero/policy.yaml
+          github-token: ${{ github.token }}
+      - name: upload SARIF to code-scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: anatrace.sarif
+      - name: upload the JSON coverage record artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: anatrace-record
+          path: anatrace-record.json
