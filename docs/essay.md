@@ -73,16 +73,18 @@ a diff; it is looking somewhere else entirely.
 The obvious objection is: *the harness already has permissions — plan mode, deny rules, allow-lists.
 Why verify after the fact?*
 
-Because runtime controls are necessary and **not sufficient**, and the gap is not theoretical. Plan
-mode constrains the *root* agent's tools; it does not reliably reach the sub-agents it spawns. Deny
-rules match the shapes their authors anticipated and skip the ones they didn't — a forbidden command
-behind a variable expansion, a wrapper, an `eval`. A runtime gate is a thing you *configure*, which
-means it is a thing you can misconfigure, and it sees only the decision in front of it, never the whole
-session in hindsight. The point is not that runtime controls are bad — it's that **the only way to know
-whether they actually held is to read what actually happened**, independently, after the fact,
-deterministically. That post-hoc, zero-instrumentation re-check is the reason anatrace exists. The
-diff-reviewer misses the conduct; the runtime lock can be bypassed *and can't prove it wasn't*. anatrace
-reads the record both of them leave behind.
+Because runtime controls are necessary and **not sufficient**. A runtime gate decides one action at a
+time, in the moment: it constrains what it was configured to constrain, and whether that configuration
+reaches every sub-agent the root spawns is harness- and version-dependent — not something the gate
+itself can confirm. Deny rules match the shapes their authors anticipated and skip the ones they didn't,
+and the gap isn't hypothetical: the obfuscations our *own* command matcher has to abstain on — a
+forbidden command behind a variable expansion, a wrapper, an `eval` — are exactly the shapes a static
+rule is most likely to wave through (it's why the matcher returns `unverifiable` on them rather than
+guessing). A gate is also a thing you *configure*, so it's a thing you can misconfigure. The point isn't
+that runtime controls are bad — it's that **the only way to know whether they actually held is to read
+what actually happened**, independently, after the fact, deterministically. That post-hoc,
+zero-instrumentation re-check is the reason anatrace exists: the diff-reviewer misses the conduct, and a
+runtime gate can be bypassed *and can't prove it wasn't.*
 
 ## The three lanes it sits between
 

@@ -49,6 +49,9 @@ replayable `anatrace.cast`) and anatrace leads with `✗ VIOLATED — no-test-ed
 in the same session, an honest `⚠ unverifiable` for a secret-read it couldn't prove because
 a spawned sub-agent's transcript was never captured. The catch and the abstention, together.
 
+> The thinking behind all of this — why a verifier that's *allowed to say "I can't tell you"* is
+> the point — is in the essay: [`docs/essay.md`](docs/essay.md).
+
 > **Status: v0.4.** The cross-harness engine, generic policy loader,
 > deterministic verdict layer, fail-loud channel coverage, coarse egress
 > detection, and delegation lineage have landed. The verdict now **leads** the
