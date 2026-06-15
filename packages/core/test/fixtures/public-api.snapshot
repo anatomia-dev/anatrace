@@ -169,3 +169,8 @@ transcriptContentResolver
 validateMandate
 verdictForClaim
 verdictsForMandate
+captureActionsFor
+remediationFor
+CaptureAction
+Remediation
+RemediationKind

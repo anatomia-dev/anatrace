@@ -86,6 +86,10 @@ export type {
   ObservedEgress,
   ChannelInspection,
 } from './channels.js';
+// N3 — coverage gaps → remediation (the capture loop's step 1): each typed abstention → the precise
+// capture that would close it, partitioned {capture-closable vs intrinsic}.
+export { captureActionsFor, remediationFor } from './coverage-remediation.js';
+export type { CaptureAction, Remediation, RemediationKind } from './coverage-remediation.js';
 
 // The subagent-aware ordered timeline (Item 1).
 export type {

@@ -52,3 +52,28 @@ section, and a recognized-but-empty source reports the gap loudly instead of a b
 The contract: anatrace tells you exactly what it checked, **and** what it recognized-but-could-not,
 and routes the remainder to your model. It never reports a clean coverage number while quietly
 dropping an obligation it saw.
+
+## Coverage gaps → capture actions (the capture loop) — `--gaps`
+
+A typed abstention is not a dead end; it names the precise thing that would let anatrace answer
+next time. `anatrace … --gaps` turns every gap into a ranked **capture action**, keyed off all three
+gap vocabularies — the per-claim `VerdictReason`, the `LineageGapReason`, and the
+`ChannelCoverageGapReason` (`captureActionsFor` in core). Each is partitioned:
+
+- **capture-closable** — a specific capture / binding / artifact would close it: a child transcript
+  (`delegate-call-without-child-transcript`), a trusted-launcher manifest
+  (`delegate-coverage-incomplete`), a subject binding (`subject-unresolvable`), a window
+  (`window-unresolvable`), a classified channel (`channel-coverage-incomplete`, `unknown-tool`). These
+  are the rungs of the loop — supply them and coverage climbs.
+- **intrinsic floor** — the honest irreducible: **no capture closes it.** An intent obligation routed
+  to a judge (`routed-to-llm`), a runtime-scoped predicate a post-hoc transcript cannot see
+  (`runtime-scoped`), a Claude-only signal on a Codex transcript (`codex-blind`), an obfuscated command
+  (`command-unresolvable`), a degraded parse (`session-parse-suspect`), an unrecognized harness version
+  (`harness-version-unrecognized`). Naming the floor is what stops the loop from ever reading as "tops
+  out": some gaps are closable, some are not, and anatrace says which.
+
+The remediation table is **exhaustive by construction** — it is a total map over each enum, so a new
+reason cannot ship without its capture action (a compile error otherwise). The single-run coverage
+rate is the engine's existing `verificationCoverage` receipt; `--gaps` adds *what would close each gap*.
+The **cross-run series** (coverage climbing over runs as a launcher auto-supplies the named captures) is
+a later phase — this ships step 1: reason → the precise capture that closes it.

@@ -20,7 +20,7 @@ import type {
   Severity,
 } from 'anatrace-core';
 import { discoverByPath, discoverLast } from './discover.js';
-import { renderJson, renderPretty } from './render.js';
+import { renderJson, renderPretty, renderGaps } from './render.js';
 import { resolveConfig } from './config.js';
 import { mandateShow, resolveMandate, resolvePolicy } from './mandate.js';
 import { resolveCaptureCoverage } from './capture.js';
@@ -40,6 +40,7 @@ interface RunOptions {
   lineageHooks?: string;
   ci?: boolean;
   failOn?: string;
+  gaps?: boolean;
   format?: string;
 }
 
@@ -66,6 +67,7 @@ program
   .option('--lineage-hooks <path>', 'Claude/Codex subagent hook capture records (JSONL or JSON array)')
   .option('--ci', 'CI gate mode: exit 1 on a violated@error (threshold defaults to error)')
   .option('--fail-on <severity>', 'gate threshold: off | info | warn | error')
+  .option('--gaps', 'append each coverage gap → the precise capture action that would close it (the capture loop)')
   .action((pathArg: string | undefined, opts: RunOptions) => {
     // ── usage-error pre-validation (exit 2) ──────────────────────────────────────────────
     // --json is an alias for --format json; a conflicting explicit --format sarif is a usage error.
@@ -176,7 +178,10 @@ program
       );
     } else {
       const skills = skillsInvoked(session); // B2 — the SkillEvent consumer (render projection)
-      process.stdout.write((format === 'json' ? renderJson(report, skills) : renderPretty(report, skills)) + '\n');
+      const body = format === 'json'
+        ? renderJson(report, skills)
+        : renderPretty(report, skills) + (opts.gaps ? '\n' + renderGaps(report) : '');
+      process.stdout.write(body + '\n');
     }
 
     // ── exit code: a genuine policy failure (gate) is 1; clean is 0. ────────────────────────

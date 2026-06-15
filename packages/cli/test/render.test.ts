@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { analyze, claudeAdapter, codexAdapter } from 'anatrace-core';
 import type { Report, ComplianceVerdict, Finding } from 'anatrace-core';
-import { renderPretty } from '../src/render.js';
+import { renderPretty, renderGaps } from '../src/render.js';
 
 /** A minimal Report for unit-testing the verdict headline / ledger without a full session. */
 function mkReport(opts: {
@@ -79,6 +79,20 @@ describe('N1 — the verdict-leading front door (headline worst-wins + refuse-gr
     const f = (ruleId: string): Finding => ({ ruleId, severity: 'info', message: 'x' });
     const out = renderPretty(mkReport({ findings: [f('tool-failure'), f('tool-failure'), f('interrupt')] }));
     expect(out).toContain('friction (3): tool-failure×2 · interrupt×1');
+  });
+});
+
+describe('N3 — renderGaps (coverage gap → capture action)', () => {
+  it('shows capture-closable rungs and the intrinsic floor distinctly', () => {
+    const r = mkReport({ compliance: [v('a', 'unverifiable', 'delegate-coverage-incomplete'), v('b', 'unverifiable', 'codex-blind')] });
+    const out = renderGaps(r);
+    expect(out).toContain('capture-closable (1)');
+    expect(out).toContain('intrinsic floor (1)');
+    expect(out).toMatch(/delegate-coverage-incomplete[\s\S]*capture manifest/);
+  });
+
+  it('says "none" when every obligation resolved', () => {
+    expect(renderGaps(mkReport({ compliance: [v('a', 'satisfied', 'predicate-matched')] }))).toContain('coverage gaps: none');
   });
 });
 
