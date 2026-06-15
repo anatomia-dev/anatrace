@@ -1,7 +1,10 @@
 /**
  * The CANONICAL scrub primitive (D2) — pure + versioned. Replaces absolute home paths,
- * emails, key-shaped tokens, and long hex with fixed glyphs so a scrubbed slice is still
- * deterministic and share-safe. anatrace OWNS this vocabulary; crack3d's local
+ * emails, key-shaped tokens, and long hex with fixed glyphs, so a scrubbed slice is
+ * deterministic and lower-risk to share. NOTE: it redacts ONLY those structured-secret shapes —
+ * it does NOT remove names, free-text content, or anything that isn't a path/email/key/hex token.
+ * Treat it as a structured-secret redactor, not a guarantee a slice is safe to publish. anatrace
+ * OWNS this vocabulary; crack3d's local
  * `packages/engine/src/scrub.ts` ships the SAME `∎path`/`∎mail`/`∎key`/`∎hex` set and plans
  * to migrate onto these bytes when D ships, so the shared golden is bit-identical TODAY.
  *
@@ -13,7 +16,7 @@
 /** The scrub vocabulary version (bumped on any rule change; pins the cross-repo golden). */
 export const SCRUB_VERSION = '1';
 
-/** A scrubbed excerpt — bounded, share-safe text pointing at a timeline location. */
+/** A scrubbed excerpt — bounded text (paths/emails/keys/hex redacted) pointing at a timeline location. */
 export interface ScrubbedExcerpt {
   blobName: string;
   lineIndex: number;

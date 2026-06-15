@@ -1,5 +1,5 @@
 name: 'anatrace'
-description: 'Deterministic, zero-LLM verifier of agent conduct. Gates a PR on artifact-integrity, surfaces what it could not verify, and uploads a re-runnable SARIF + JSON record.'
+description: 'Deterministic verifier of agent conduct (zero-LLM in the published verdict path). Gates a PR on artifact-integrity, surfaces what it could not verify, and uploads a re-runnable SARIF + JSON record.'
 author: 'anatomia-dev'
 branding:
   icon: 'check-circle'

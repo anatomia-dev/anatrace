@@ -49,12 +49,17 @@ replayable `anatrace.cast`) and anatrace leads with `✗ VIOLATED — no-test-ed
 in the same session, an honest `⚠ unverifiable` for a secret-read it couldn't prove because
 a spawned sub-agent's transcript was never captured. The catch and the abstention, together.
 
-> **Status: v0.3.** The cross-harness engine, generic policy loader,
+> **Status: v0.4.** The cross-harness engine, generic policy loader,
 > deterministic verdict layer, fail-loud channel coverage, coarse egress
-> detection, and delegation lineage have landed. Degraded sessions — a
-> parse-suspect transcript or an unrecognized harness version — downgrade to
-> `unverifiable` rather than ever false-passing, on every verdict path. The
-> public API surface and the `unverifiable` reason vocabulary are frozen by a
+> detection, and delegation lineage have landed. The verdict now **leads** the
+> `--last` output and refuses green under degradation; the `never_edit`
+> test-integrity check, the coverage-gap → capture-action remediation, the
+> schema-locked `--json` record, and the CI-gate GitHub Action have landed too.
+> **Breaking in 0.4:** the LLM-judge input (`dossier` / `hookRequests`) was demoted
+> off the public surface and the `--json` envelope — zero-LLM in the published
+> verdict path is now a surface property, not just a runtime one. Degraded sessions
+> downgrade to `unverifiable` rather than ever false-passing, on every verdict path.
+> The public API surface and the `unverifiable` reason vocabulary are frozen by a
 > snapshot test; both `anatrace` and `anatrace-core` are pre-1.0 and versioned
 > independently.
 
@@ -218,10 +223,12 @@ gap.
   mandate, gate CI.
 - **`anatrace-core`** — the pure engine and shared type contract. No fs, no
   network, no clock, no randomness.
-- **`anatrace-action`** — a reserved package slot for a future CI-gate GitHub
-  Action. **Not yet functional and not published — do not depend on it.** The CLI
-  already gates CI today (`anatrace --ci` / `--fail-on`, `--format sarif`); the
-  Action wrapper ships in a later release.
+- **`anatrace-action`** — the CI-gate GitHub Action: it runs anatrace on a PR,
+  uploads violated-only SARIF to code-scanning, posts a sticky verdict comment that
+  leads with the unverifiables, and gates on artifact-integrity. Built and verified
+  by a live CI run; **not yet published as a tagged action** (that's a release step —
+  see `docs/guides/ci-gate.md`). The CLI also gates CI directly (`anatrace --ci` /
+  `--fail-on`, `--format sarif`).
 
 ## Determinism & privacy contract
 
