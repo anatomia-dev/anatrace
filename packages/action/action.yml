@@ -1,0 +1,42 @@
+name: 'anatrace'
+description: 'Deterministic, zero-LLM verifier of agent conduct. Gates a PR on artifact-integrity, surfaces what it could not verify, and uploads a re-runnable SARIF + JSON record.'
+author: 'anatomia-dev'
+branding:
+  icon: 'check-circle'
+  color: 'purple'
+inputs:
+  session-path:
+    description: 'Path to a session transcript (Claude <id>.jsonl or Codex rollout-*.jsonl). Omit to use --last.'
+    required: false
+  last:
+    description: 'Analyze the most recent local session (~/.claude or ~/.codex) instead of a path.'
+    required: false
+    default: 'false'
+  policy:
+    description: 'Path to a generic .anatrace.yaml policy.'
+    required: false
+  mandate:
+    description: 'A framework source dir to extract the mandate from.'
+    required: false
+  role:
+    description: 'Bind policy role:<name> to the root agent for this session.'
+    required: false
+  comment:
+    description: 'Post a sticky PR comment leading with the unverifiables-by-reason (default true).'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'Token for posting the sticky PR comment (usually ${{ github.token }}).'
+    required: false
+    default: ${{ github.token }}
+  sarif-file:
+    description: 'Where to write the violated-only SARIF (upload it with github/codeql-action/upload-sarif).'
+    required: false
+    default: 'anatrace.sarif'
+  record-file:
+    description: 'Where to write the JSON coverage record (the re-runnable staple; upload as an artifact).'
+    required: false
+    default: 'anatrace-record.json'
+runs:
+  using: 'node20'
+  main: 'dist/index.mjs'
