@@ -1,6 +1,6 @@
 {
   "name": "anatrace-core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Pure cross-harness session parsing and deterministic policy verification for AI agents",
   "type": "module",
   "license": "MIT",
