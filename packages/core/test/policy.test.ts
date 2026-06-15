@@ -48,6 +48,23 @@ describe('.anatrace.yaml policy loader', () => {
     ]);
   });
 
+  it('compiles never_edit into a file-scope / edit-paths / not_contains BLACKLIST claim (N1b)', () => {
+    const result = loadPolicyYaml(`
+version: 1
+rules:
+  - id: no-test-edits
+    subject: this-agent
+    never_edit: test/
+`);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const claim = result.mandate.claims[0]!;
+    expect(claim.kind).toBe('file-scope');
+    expect(claim.predicate).toMatchObject({ target: 'edit-paths', matcher: 'not_contains', value: 'test/' });
+    // a blacklist, NOT a whitelist: never_edit must NOT carry only_edit's strict deviationHandling.
+    expect(claim.deviationHandling).toBeUndefined();
+  });
+
   it('rejects ambiguous rules with more than one verb', () => {
     const result = loadPolicyYaml(`
 version: 1
