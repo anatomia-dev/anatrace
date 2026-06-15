@@ -24,6 +24,7 @@
     "tsdown": "^0.22.0",
     "typescript": "^5.7.0",
     "vitest": "^4.1.5",
-    "@changesets/cli": "^2.31.0"
+    "@changesets/cli": "^2.31.0",
+    "ajv": "^6.12.6"
   }
 }

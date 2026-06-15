@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://anatrace.dev/report.schema.json",
+  "title": "anatrace coverage record (the --json envelope)",
+  "description": "The portable, schema-locked record anatrace emits with --json. Self-validated in CI (N4). The top level and the ComplianceVerdict shape are STRICT (additionalProperties:false) — this is the bright-line lock: the deterministic verdict carries NO rationale/severity/model, and the demoted LLM-judge input (dossier/hookRequests) can never reappear on the envelope. Deep meta-facts (session.*, lineage, verificationCoverage internals) are intentionally permissive so additive facts don't churn the lock.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "session", "findings"],
+  "properties": {
+    "schemaVersion": { "type": "integer" },
+    "session": {
+      "type": "object",
+      "required": ["harness", "model", "sessionId", "counts", "observedVersions"],
+      "properties": {
+        "harness": { "type": "string", "enum": ["claude", "codex", "human", "unknown"] },
+        "model": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "counts": { "type": "object" },
+        "observedVersions": { "type": "array", "items": { "type": "string" } },
+        "timeBounds": { "type": "object" },
+        "parseHealth": { "type": "object" }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ruleId", "severity", "message"],
+        "properties": {
+          "ruleId": { "type": "string" },
+          "severity": { "type": "string", "enum": ["off", "info", "warn", "error"] },
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "compliance": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/ComplianceVerdict" }
+    },
+    "verificationCoverage": { "type": "object" },
+    "lineage": { "type": "object" },
+    "cost_estimate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["usd", "priced", "priced_as_of"],
+      "properties": {
+        "usd": { "type": "number" },
+        "priced": { "type": "boolean" },
+        "priced_as_of": { "type": "string" }
+      }
+    },
+    "skills": { "type": "array" }
+  },
+  "definitions": {
+    "ComplianceVerdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The deterministic per-claim verdict. The key set is FROZEN to {claimId,status,reason,evidence,source} — additionalProperties:false is the bright line that keeps rationale/severity/model OUT of the deterministic channel.",
+      "required": ["claimId", "status", "reason", "evidence", "source"],
+      "properties": {
+        "claimId": { "type": "string" },
+        "status": { "type": "string", "enum": ["satisfied", "violated", "unverifiable"] },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "predicate-matched", "predicate-not-matched", "routed-to-llm", "runtime-scoped",
+            "low-confidence", "absent-signal", "content-unresolvable", "command-unresolvable",
+            "codex-blind", "subject-unresolvable", "delegate-coverage-incomplete",
+            "channel-coverage-incomplete", "window-unresolvable", "harness-version-unrecognized",
+            "session-parse-suspect"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["blobName", "lineIndex", "agent", "eventType"],
+            "properties": {
+              "blobName": { "type": "string" },
+              "lineIndex": { "type": "integer" },
+              "agent": { "type": "object" },
+              "eventType": { "type": "string" }
+            }
+          }
+        },
+        "source": { "type": "string", "const": "deterministic" }
+      }
+    }
+  }
+}

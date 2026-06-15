@@ -2,8 +2,6 @@ import type { ProvenanceCounts } from './provenance.js';
 import type { Finding } from './types.js';
 import type { Harness, ParseHealth } from './session.js';
 import type { ComplianceVerdict } from './verdict.js';
-import type { Dossier } from './dossier.js';
-import type { HookRequest } from './hook.js';
 import type {
   CompactionFacts,
   ContextFacts,
@@ -28,11 +26,11 @@ import type { LineageExtraction } from './lineage.js';
  * v2 RESERVED keys — FILLED at Phase D (no schemaVersion re-bump; additive, founder-decided):
  *  - `compliance?` — the per-claim deterministic `ComplianceVerdict[]` (the brand). Surveillance
  *    guardrail: a verdict keys ONLY on `claimId`, NEVER an author/identity.
- *  - `dossier?` — the said-vs-did artifact (bounded scrubbed evidence; the judge's input).
- *  - `hookRequests?` — the `routed-to-llm` residue manifest (a team with no judge ships ZERO
- *    LLM calls and still gets a complete, inspectable list).
- * All three are OPTIONAL: a no-mandate run omits them, so R2 byte-identity holds. They ride
- * the deterministic channel ONLY — `JudgeVerdict`/`rationale`/`model` NEVER appear here.
+ *  - `verificationCoverage?` — the claim-keyed channel-coverage receipt.
+ * Both are OPTIONAL: a no-mandate run omits them, so R2 byte-identity holds. They ride the
+ * deterministic channel ONLY — `JudgeVerdict`/`rationale`/`model` NEVER appear here. (The LLM-judge
+ * input `dossier`/`hookRequests` was DEMOTED off this surface in N4/Tier-3 — built internally, never
+ * attached: zero-LLM in the published verdict path is a SURFACE property, not just a runtime one.)
  */
 export interface Report {
   schemaVersion: number;
@@ -65,10 +63,11 @@ export interface Report {
   findings: Finding[];
   /** D — per-claim deterministic verdicts (no severity/rationale/model); present iff a mandate was supplied. */
   compliance?: ComplianceVerdict[];
-  /** D — the said-vs-did dossier (bounded scrubbed evidence); present iff a mandate was supplied. */
-  dossier?: Dossier;
-  /** D — the `routed-to-llm` residue manifest (the judge's input); present iff a mandate was supplied. */
-  hookRequests?: HookRequest[];
+  // N4/Tier-3 — `dossier` and `hookRequests` were DEMOTED off this public contract and the `--json`
+  // envelope. They are the LLM-judge's input (said-vs-did + scrubbed evidence) — an LLM-judge-shaped
+  // artifact that has no place on the deterministic, zero-LLM-in-the-published-verdict-path surface.
+  // The capability is untouched: `runCompliance` still builds them internally (the quarantined
+  // `Config.judge`/`adjudicate` seam, a config-flip away), they are simply no longer attached to Report.
   /** Claim-keyed receipt for which behavioral channels were completely inspected. */
   verificationCoverage?: VerificationCoverage;
   /**

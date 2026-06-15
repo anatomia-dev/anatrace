@@ -462,17 +462,19 @@ describe('R2 byte-identity — the NO-mandate run is unchanged (with vs without)
     const session = claudeCleanSession(dir);
     const without = JSON.parse(run([session, '--json'], dir).stdout) as Record<string, unknown>;
     const withM = JSON.parse(run([session, '--mandate', ANATOMIA_SRC, '--json'], dir).stdout) as Record<string, unknown>;
-    // The mandate adds compliance/dossier; the rest of the envelope (session/findings/cost/skills) is identical.
+    // The mandate adds compliance/verificationCoverage; the rest of the envelope is identical.
     const strip = (o: Record<string, unknown>): Record<string, unknown> => {
       const c = { ...o };
       delete c['compliance'];
-      delete c['dossier'];
-      delete c['hookRequests'];
       delete c['verificationCoverage'];
       return c;
     };
     expect(strip(withM)).toEqual(strip(without));
     expect('compliance' in withM).toBe(true);
+    // N4/Tier-3 — dossier + hookRequests (the LLM-judge input) are DEMOTED off the --json envelope,
+    // even WITH a mandate. The internal seam stays; the public surface does not carry it.
+    expect('dossier' in withM).toBe(false);
+    expect('hookRequests' in withM).toBe(false);
   });
 });
 
