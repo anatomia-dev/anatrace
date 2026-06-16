@@ -1,5 +1,60 @@
 # anatrace-core
 
+## 0.4.0
+
+### Minor Changes
+
+- e95c565: 0a — quote-aware three-tier command matcher; fix the non-executed-position false-VIOLATE; add the frozen `command-unresolvable` reason.
+
+  The forbidden-command check (`command-content`) matched a needle with a literal `.includes` over the whole command string, so a needle in a NON-EXECUTED position false-VIOLATEd: `echo "git push --force"` and `git commit -m "git push --force"` _mention_ the forbidden command without running it, yet resolved `violated`. On a verifier a false-VIOLATE is thesis-breaking, exactly like a false-PASS.
+
+  The new matcher (`command-match.ts`) resolves the EXECUTED command surface, quote-aware, into three tiers:
+
+  - **match → `violated`** — the needle IS the executed command. Force variants STAY violated (`git push --force-with-lease` rewrites the branch); a `git` global flag (`git -c core.pager=cat push --force`) no longer hides the subcommand (a latent false-negative the old `.includes` also missed).
+  - **no-match → `satisfied`** — the needle provably never executed (a data-program arg, a commit-message value, a comment, an unrelated token).
+  - **unresolvable → `unverifiable(command-unresolvable)`** — a NEW member of the frozen `VerdictReason` enum (carries the snapshot + reachability lock). Emitted when obfuscation defeats a static surface: `eval`, `$(…)`/backticks, a `$VAR` that could expand to the needle, a pipe into a shell interpreter, a heredoc/here-string fed to one, an unbalanced quote, or a quoted command handed to a wrapper (`xargs sh -c "…"`, `parallel -m "…"`).
+
+  **The load-bearing invariant** (acceptance test in `command-match.test.ts`'s `INVARIANT` block): a surface-extraction or quoting ambiguity may only ever resolve to `match` or `unresolvable`, **never** `no-match` — a mis-judged executed command must never read clean. Validated test-first against an adversarial conformance corpus (nested/escaped quotes, `--flag=value`, heredocs, line continuations, redirections, message-flag-vs-command-runner, wrapper indirection) and hardened by three independent adversarial review rounds that each surfaced and closed a false-`no-match` (message-flag value-drop, its quoted sibling, mid-command redirection injection). (A pre-publish review later found one more — an ANSI-C `$'...'` off-by-one — fixed in the same 0.4.0 release; see the `command-match-ansi-c-false-pass` changeset.)
+
+  `command-unresolvable` surfaces per-claim in the coverage receipt and the `--json` `compliance` array, so the abstention is reported, never a silent sink. Doc: `docs/the-unverifiable-taxonomy.md`.
+
+- 58a6a74: N1b — the `never_edit` policy verb + the test-edit hero.
+
+  Adds `never_edit: <path-substring>` to the generic `.anatrace.yaml` policy — the blacklist sibling of `only_edit`. It compiles to a `file-scope` / `edit-paths` / `not_contains` claim and routes through the existing `evalForbiddenEdit` blacklist evaluator: any edit whose normalized path contains the forbidden substring → `violated` with a pointer to the edit event; none → `satisfied`. This makes the headline check expressible — _"the agent edited a file under `test/` it was obligated not to"_ — the conduct a diff-reviewer structurally cannot see (a test-edit-to-pass and a legitimate fix can produce identical diffs; only the transcript distinguishes them).
+
+  `never_edit` is a path **substring** match (use `test/` with the trailing slash for "under test/"), consistent with the other path verbs; a glob form is future work.
+
+  Ships the curated-gappy hero fixture (`packages/cli/test/fixtures/hero/`): one session that BOTH games a test (caught as `violated`) AND carries a genuine `unverifiable` — a delegate-inclusive secret-read obligation anatrace can't prove because the spawned sub-agent's transcript was never captured (the lineage gap `delegate-call-without-child-transcript`). The catch and the honest abstention, side by side, plus a replayable `anatrace.cast` (asciinema v2) that leads with the verdict.
+
+- b2718fb: N3 — coverage gaps → remediation (the capture loop's step 1).
+
+  Each typed abstention now names the precise CAPTURE ACTION that would let anatrace answer next time. New `captureActionsFor(report)` / `remediationFor(source, reason)` (+ `CaptureAction` / `Remediation` / `RemediationKind` types) key a reason→capture table off all three gap vocabularies — the per-claim `VerdictReason`, the `LineageGapReason`, and the `ChannelCoverageGapReason` — each partitioned:
+
+  - **capture-closable** — a child transcript, a trusted-launcher manifest, a subject binding, a window, a classified channel would close it (the rungs of the loop; supply them and coverage climbs).
+  - **intrinsic floor** — the honest irreducible: no capture closes it (`routed-to-llm`, `runtime-scoped`, `codex-blind`, `command-unresolvable`, degraded parse, unrecognized version). Naming the floor stops the loop reading as "tops out".
+
+  The table is exhaustive by construction (a total `Record` over each enum, so a new reason cannot ship without its remediation — a compile error otherwise). The CLI surfaces it with `--gaps`, capture-closable rungs first, then the intrinsic floor. The cross-run coverage series is a later phase; this ships step 1. Doc: `docs/coverage-and-soundness.md`.
+
+- 2370732: N4 — schema-locked portable record + the dossier demotion (Tier-3).
+
+  **Dossier demotion (breaking — pre-1.0 → minor).** The LLM-judge input — the said-vs-did `dossier` and the `hookRequests` residue manifest — is removed from the **public surface AND the `--json` envelope**. It is an LLM-judge-shaped artifact with no place on a deterministic, zero-LLM-in-the-published-verdict-path API. Removed exports: `buildDossier`, `DOSSIER_SCHEMA_VERSION`, `EVIDENCE_CAP`, `Dossier`, `DossierClaim`, `DossierClaimSlice`, `buildHookRequests`, `HookRequest`; `Report.dossier`/`Report.hookRequests` dropped. **The capability is untouched:** `runCompliance` still builds both internally (the quarantined `Config.judge`/`adjudicate` seam, a config-flip away) — they are simply no longer attached to `Report`. Zero-LLM in the published verdict path is now a **surface** property, not just a runtime one.
+
+  **Schema-locked record.** A committed `report.schema.json` (draft-07) freezes the `--json` envelope; anatrace **validates its own output against it in CI**. The top level and the `ComplianceVerdict` are strict (`additionalProperties: false`): the verdict structurally cannot carry `rationale`/`severity`/`model` (the bright line), and the demoted dossier/hookRequests can never reappear (the demotion lock). The schema's verdict-reason enum is held in lockstep with the frozen `VerdictReason` set.
+
+  **Wording sweep.** Genuinely-bare no-LLM user-facing claims tightened to "zero-LLM in the published verdict path"; a precise **grep-guard CI test** (forbidding absolute no-LLM-everywhere assertions, requiring every zero-LLM mention to be scoped) makes the sweep mechanical and forward-covers the essay. Docs: `docs/reference/coverage-record.md`.
+
+### Patch Changes
+
+- 1e5cdda: Fix a false-PASS in the command matcher's ANSI-C `$'...'` quote handling (pre-publish blocker). The branch advanced the cursor by two past the closing quote instead of one, swallowing the character after it — so `git $'push' --force origin main` (which bash executes as a real force-push) mis-read as `git push--force` and the forbidden-command needle no longer matched, resolving `satisfied`. A genuinely-executed forbidden command read clean — the exact false-PASS the verifier exists to prevent. Fixed to advance by one (matching the plain single-quote branch), pinned by new conformance + INVARIANT fixtures (`git $'push' --force …` → `violated`; `git push $'--force'` → `violated`), and re-verified end-to-end on the built CLI (force variants still `violated`, a non-executed needle still `satisfied`).
+- 87d2113: SARIF results now always carry a `location` (N7). GitHub code-scanning requires every result to have at least one location; a conduct verdict isn't always tied to a repo line, so `toSarif` falls back to the obligation's source (the policy/mandate path the CLI supplies) when no file location is known, and uses the real file location whenever it is. This makes the violated-only SARIF ingestible by code-scanning (the anatrace Action uploads it). Additive `fallbackUri` parameter on `toSarif`.
+- fbe7fcc: Step 0 correctness gates (Phase 1: make the inch a foot) — pin two untested false-PASS guards, close the price-value CI hole, and document the CI exit-code contract. No verdict-behavior change.
+
+  - **0d — `expandDelegates` false-PASS arms pinned.** The cycle (`verdict.ts:165-168`) and duplicate-lane (`:156-157,162`) completeness guards were the only untested false-PASS-preventing arms in the verdict layer. Added differential tests (against `completeCoverage()`, which proves the negative `satisfied`) so a cyclic or duplicate-lane trusted-launcher manifest flips a proves-absence claim to `unverifiable(delegate-coverage-incomplete)`. Mutation-verified: neutering either guard fails exactly its test; a positive delegate sighting still proves `violated` (a violation needs no manifest). Test-only — the arms already behaved correctly.
+
+  - **0c — price / context-limit bump-gate.** Nothing pinned the `PRICES` / `CONTEXT_LIMITS` _values_, so a silent rate drift (the class the gpt-5.5 4× error was) would slip CI. Added a `version ⟺ rate-digest` gate over both tables: a value change without a version-stamp move now fails CI. Mutation-verified on both tables. Promoted the gpt-5.5 source-URL + verified-date from a comment to optional `PriceEntry.source` / `PriceEntry.asOf` data fields (additive, non-breaking — existing consumers compile unchanged). `CONTEXT_LIMITS_VERSION` (`2026-06-11`) is deliberately left independent of `PRICE_TABLE_VERSION` (`2026-06-14`): the limit data is genuinely unchanged since 06-11, so the older stamp is honest — force-aligning it would claim a re-verification that never happened.
+
+  - **0b — CI exit-code contract documented.** The shipped contract — `--ci` fails the build only on `violated`; `unverifiable` maps to `info` and never gates — was code-only (`sarif.ts:100`) and already test-pinned (`d-config.test.ts:126-131`, `gate.test.ts:91`). Stated it for consumers in the README, including why it does not contradict the verdict surface refusing to report "all clear" under `unverifiable > 0` (honesty of the verdict vs blocking on a proven violation are different axes).
+
 ## 0.3.0
 
 ### Minor Changes
