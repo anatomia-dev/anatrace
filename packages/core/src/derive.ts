@@ -80,6 +80,15 @@ export function isUnreadableCommandEvent(e: SessionEvent): boolean {
   });
 }
 
+/**
+ * Whether a tool NAME is a recognized shell-command tool (the `COMMAND_TOOLS` membership). Exported
+ * for cross-module reuse (the A2.3 runner-outcome gate) so the `{Bash, exec_command}` set has ONE
+ * home and cannot drift. INTERNAL — not re-exported from `index.ts` (no public-surface widening).
+ */
+export function isCommandToolName(name: string | undefined): boolean {
+  return name !== undefined && COMMAND_TOOLS.has(name);
+}
+
 function emptyTokens(): TokenCounts {
   return { input: 0, output: 0, cache_create: 0, cache_read: 0 };
 }

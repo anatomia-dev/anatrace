@@ -73,5 +73,24 @@ Unknown tools and unsupported commands produce
 `unverifiable: channel-coverage-incomplete`, with typed details in
 `Report.verificationCoverage` and `Dossier.verificationCoverage`.
 
+## Session facts for downstream consumers
+
+Beyond the verdict, `anatrace-core` exposes a deterministic, facts-only projection layer for tools
+that consume it for *parsing + session facts* (no LLM, no verdict, no identity/score):
+
+```ts
+import { buildSessionMeta, gitOpsTimeline, runnerOutcomes } from 'anatrace-core';
+
+const meta = buildSessionMeta(session);          // per-session aggregate facts (git/context/flow/…)
+const gitOps = gitOpsTimeline(session.events);   // positioned mutating git ops (when/order/lane)
+const tests = runnerOutcomes(session.events);    // structured pass/fail/unknown, runner-gated
+```
+
+`runnerOutcomes` classifies only on a runner-specific banner (vitest/jest, the ana verdict line) and
+abstains otherwise — pytest/cargo/go are a deliberate blind spot, never a guessed pass. `gitOpsTimeline`
+shares the verdict path's quote-aware segmentation, so quoted/data `git` tokens are never phantom ops.
+Full reference, including the honesty floor and the known blind spots:
+[`docs/reference/session-facts.md`](https://github.com/anatomia-dev/anatrace/blob/main/docs/reference/session-facts.md).
+
 See the [repository README](https://github.com/anatomia-dev/anatrace#readme) for
 CLI usage and the full honesty contract.
