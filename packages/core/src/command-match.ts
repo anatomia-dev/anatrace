@@ -23,6 +23,25 @@
 /** The three tiers. Caller maps: match->violated, no-match->satisfied, unresolvable->unverifiable. */
 export type CommandMatchTier = 'match' | 'no-match' | 'unresolvable';
 
+/**
+ * Quote-aware top-level segmentation for FACTS projections (the M2 git-ops projection). Returns, per
+ * top-level segment (split on `;` / newline / `&&` / `||` / `|`, QUOTE-AWARE), that segment's WORD
+ * SURFACES (quotes resolved; an unresolved expansion/substitution rendered as the WILD sentinel; a
+ * heredoc/here-string body consumed, never mis-tokenized as commands). This is the SAME lexer the
+ * verdict-path command matcher uses, so a `git` token inside `echo "…; git push …"` data is NOT split
+ * out as a phantom command (the naive `String.split` over-emission). Returns `[]` on unbalanced quoting
+ * (bias: emit nothing rather than a phantom op from a half-parsed line). INTERNAL — not re-exported.
+ */
+export function commandSegments(command: string): string[][] {
+  let segments: Segment[];
+  try {
+    segments = lex(command);
+  } catch {
+    return [];
+  }
+  return segments.map((s) => s.words.map((w) => w.surface));
+}
+
 /** A wildcard sentinel marking an unresolved expansion/substitution gap in a built surface. */
 const WILD = '\u0001';
 

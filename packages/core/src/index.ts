@@ -201,16 +201,39 @@ export { parseSession } from './parse.js';
 
 // Meta-facts (M1–M4) — the additive per-session FACTS layer (no LLM, no verdict, no person-score).
 //
-// Phase 0 P0.0 decision = UN-EXPORT (reversible; Cracked is not a committed near-term plan).
-// The person-read FEEDER entry points (`buildSessionMeta`, `gitOpsOf`, `contextLimitFor`,
-// `CONTEXT_LIMITS`/`CONTEXT_LIMITS_VERSION`) and their named fact types are intentionally NOT part
-// of core's public surface: they feed a separate person-analytics aggregator ("Cracked"), which
-// sits at odds with the zero-LLM verdict positioning and only adds surface to freeze at the P0.4
-// API-lock. The COMPUTATION stays — `analyze()` still attaches the additive optional meta blocks to
-// `Report.session` (so the fact types remain reachable transitively through the public `Report`;
-// fully severing that is a separate "should `Report` expose meta-facts?" decision for P0.4).
+// SURFACE DECISION (reverses the P0.0 UN-EXPORT): these FACTS feeders are PUBLIC, as a stable
+// CONSUMER surface for a downstream session-analytics aggregator (crack3d) that consumes anatrace
+// for parsing + session facts only. They are deliberately NOT part of the anatrace brand story —
+// the README/essay lead with the deterministic zero-LLM VERDICT, never these facts. Re-exporting is
+// safe by construction: every block is a PURE projection of the parsed timeline, carries ZERO LLM,
+// ZERO verdict, and NO author/identity or composite-score field (the bright line in `meta/facts.ts`).
+// The COMPUTATION already shipped (`analyze()` attaches the optional blocks to `Report.session`); this
+// just makes the direct feeders pinnable instead of reachable only transitively through `Report`.
 // `meta/lane.ts` is SPINE (`verdict.ts` imports `laneCapture`/`isGradeableCapture`) and STAYS public.
 export { rootLaneEvents, splitByLane, isRootLane } from './meta/lane.js';
+// The per-session FACTS block + its named fact types (A0.1 — the crack3d card-serial feeders).
+export { buildSessionMeta } from './meta/facts.js';
+export type {
+  SessionMetaFacts,
+  CompactionBoundary,
+  CompactionFacts,
+  ContextFacts,
+  EnvironmentFacts,
+  FlowFacts,
+  ScopeShapeFacts,
+} from './meta/facts.js';
+export type { GitOpsSummary, GitOpCounts } from './meta/git-ops.js';
+// A2.2 — the POSITIONED mutating-git-op stream (the recovery-episode substrate; a FACT, not a verdict).
+export { gitOpsTimeline } from './meta/git-ops.js';
+export type { GitOpEvent } from './meta/git-ops.js';
+// A2.3 — the STRUCTURED runner-outcome stream (runner-gated PASS/FAIL/unknown; a FACT, not a verdict).
+export { runnerOutcomes } from './meta/runner.js';
+export type { RunnerOutcome } from './meta/runner.js';
+// The model→context-window calibration table (A1.4) — the SAME data category as `PRICES` (model → a
+// number, pure data + arithmetic, no judge / fetch / clock). Public + versioned so a consumer's
+// context receipt cannot silently drift when the table moves; bump `CONTEXT_LIMITS_VERSION` with it.
+export { CONTEXT_LIMITS, CONTEXT_LIMITS_VERSION, contextLimitFor } from './meta/context-limits.js';
+export type { ContextLimitEntry } from './meta/context-limits.js';
 // `getRule`/`allRules` had zero consumers (core/CLI/action/anatomia) — removed from the surface.
 export { defaultPack, resolvePack } from './registry.js';
 export { resolveSeverity, resolveOptions, applyIgnores } from './config.js';
