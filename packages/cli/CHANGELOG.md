@@ -5,7 +5,7 @@
 ### Patch Changes
 
 - Updated dependencies [79bca5a]
-  - anatrace-core@0.5.0
+  - anatrace-core@0.4.1
 
 ## 0.4.0
 
