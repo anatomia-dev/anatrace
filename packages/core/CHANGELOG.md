@@ -1,10 +1,12 @@
 # anatrace-core
 
-## 0.5.0
+## 0.4.1
 
-### Minor Changes
+### Patch Changes
 
 - 79bca5a: Additive public surface for downstream session-analytics consumers. The deterministic verdict layer and the `--json` envelope are untouched; every change below is a new or re-exported pure projection of the parsed timeline (deterministic, no clock/fs, no verdict, no author/identity or score field).
+
+  > Note: the public surface only GROWS here (new exports) — by strict semver this is a minor, but it ships as a patch to keep `anatrace-core` and `anatrace` version-aligned. Nothing existing changed, so pinning `^0.4.0` picks it up safely.
 
   - **Re-export the per-session meta-facts feeders.** `buildSessionMeta` (value) plus the fact types `SessionMetaFacts`, `CompactionBoundary`, `CompactionFacts`, `ContextFacts`, `EnvironmentFacts`, `FlowFacts`, `ScopeShapeFacts`, `GitOpsSummary`, `GitOpCounts`. The computation already shipped on `Report.session`; this makes the direct feeders pinnable instead of reachable only transitively.
   - **Re-export the context-window calibration table.** `CONTEXT_LIMITS`, `CONTEXT_LIMITS_VERSION`, `contextLimitFor`, `ContextLimitEntry` — the same data category as the already-public `PRICES`, versioned so a consumer's context receipt cannot silently drift when the table moves.
